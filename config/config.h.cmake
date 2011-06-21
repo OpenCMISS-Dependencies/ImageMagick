@@ -1,7 +1,7 @@
 #ifndef _@IMAGEMAGICK_CONFIG_PREFIX@MAGICK_CONFIG_H
 #define _@IMAGEMAGICK_CONFIG_PREFIX@MAGICK_CONFIG_H 1
 
-/* config/config.h.in.  Generated from configure.ac by autoheader.  */
+/* config/config.h.cmake.  Created for cmake to configure.  */
 
 /* Define if building universal (internal helper macro) */
 @HASHCMAKEDEFINE@ @IMAGEMAGICK_CONFIG_PREFIX@AC_APPLE_UNIVERSAL_BUILD
@@ -26,6 +26,9 @@
 
 /* Location of coder modules */
 @HASHCMAKEDEFINE@ @IMAGEMAGICK_CONFIG_PREFIX@CODER_PATH ${CODER_PATH}
+
+/* Subdirectory of where the relative share directory is */
+@HASHCMAKEDEFINE@ @IMAGEMAGICK_CONFIG_PREFIX@SHARE_RELATIVE_PATH ${SHARE_RELATIVE_PATH}
 
 /* Subdirectory of lib where coder modules are installed */
 @HASHCMAKEDEFINE@ @IMAGEMAGICK_CONFIG_PREFIX@CODER_RELATIVE_PATH ${CODER_RELATIVE_PATH}
