@@ -1823,6 +1823,7 @@ ModuleExport void UnregisterTIFFImage(void)
   (void) UnregisterMagickInfo("TIF");
   (void) UnregisterMagickInfo("TIFF");
   (void) UnregisterMagickInfo("TIFF64");
+#if defined(MAGICKCORE_TIFF_DELEGATE)
   if (tiff_semaphore == (SemaphoreInfo *) NULL)
     tiff_semaphore=AllocateSemaphoreInfo();
   LockSemaphoreInfo(tiff_semaphore);
@@ -1832,6 +1833,7 @@ ModuleExport void UnregisterTIFFImage(void)
   instantiate_key=MagickFalse;
   UnlockSemaphoreInfo(tiff_semaphore);
   DestroySemaphoreInfo(&tiff_semaphore);
+#endif
 }
 
 #if defined(MAGICKCORE_TIFF_DELEGATE)

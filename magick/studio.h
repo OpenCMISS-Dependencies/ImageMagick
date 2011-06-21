@@ -244,16 +244,16 @@ extern int vsnprintf(char *,size_t,const char *,va_list);
 # include <sys/timeb.h>
 # endif
 # if defined(MAGICKCORE_POSIX_SUPPORT)
-#  if defined(MAGICKCORE_HAVE_SYS_NDIR_H) || defined(MAGICKCORE_HAVE_SYS_DIR_H) || defined(MAGICKCORE_HAVE_NDIR_H)
+#  if defined(MAGICKCORE_HAVE_DIR_IN_SYS_NDIR_H) || defined(MAGICKCORE_HAVE_DIR_IN_SYS_DIR_H) || defined(MAGICKCORE_HAVE_DIR_IN_NDIR_H)
 #   define dirent direct
 #   define NAMLEN(dirent) (dirent)->d_namlen
-#   if defined(MAGICKCORE_HAVE_SYS_NDIR_H)
+#   if defined(MAGICKCORE_HAVE_DIR_IN_SYS_NDIR_H)
 #    include <sys/ndir.h>
 #   endif
-#   if defined(MAGICKCORE_HAVE_SYS_DIR_H)
+#   if defined(MAGICKCORE_HAVE_DIR_IN_SYS_DIR_H)
 #    include <sys/dir.h>
 #   endif
-#   if defined(MAGICKCORE_HAVE_NDIR_H)
+#   if defined(MAGICKCORE_HAVE_DIR_IN_NDIR_H)
 #    include <ndir.h>
 #   endif
 #  else
