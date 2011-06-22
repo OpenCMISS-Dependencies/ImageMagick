@@ -262,7 +262,7 @@ MagickExport int Exit(int status)
 %    o time_zone: the time zone.
 %
 */
-MagickExport int gettimeofday (struct timeval *time_value,
+MagickExport int gettimeofday_im (struct timeval *time_value,
   struct timezone *time_zone)
 {
 #define EpochFiletime  MagickLLConstant(116444736000000000)

@@ -376,7 +376,7 @@ extern MagickExport double
 extern MagickExport int
   Exit(int),
 #if !defined(__MINGW32__)
-  gettimeofday(struct timeval *,struct timezone *),
+  gettimeofday_im(struct timeval *,struct timezone *),
 #endif
   IsWindows95(),
   NTCloseDirectory(DIR *),
