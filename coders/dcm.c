@@ -3069,8 +3069,8 @@ static void dcmCloseBlob(void *image)
      quantum_info->pack = MagickFalse;
   }
 
-  SetQuantumDepth(image, quantum_depth, quantum_info);
-  SetQuantumFormat(image, quantum_format, quantum_info);
+  SetQuantumDepth(image, quantum_info, quantum_depth);
+  SetQuantumFormat(image, quantum_info, quantum_format);
 
   if (high_bit == 0)
   {
@@ -3109,7 +3109,7 @@ static void dcmCloseBlob(void *image)
 		for (i = 0 ; i < height*width ; i++)
 		{
 			bit_usage |= *data_ptr; 
-			data_ptr+;
+			data_ptr++;
 		}
 	} break;
 	case 16:
@@ -3235,7 +3235,7 @@ static void dcmCloseBlob(void *image)
 //	  	printf(" 63 63 %d\n", ((short*)(data + (y*width+63)*bits_allocated/8*samples_per_pixel))[0]);
 //	  if (y == 255)
 //	  	printf(" 255 255 %d\n", ((short*)(data + (y*width+255)*bits_allocated/8*samples_per_pixel))[0]);
-      q=SetImagePixels(image,0,y,image->columns,1);
+      q=QueueAuthenticPixels(image, 0, y, image->columns, 1, exception); 
       if (q == (PixelPacket *) NULL)
         break;
 #if defined (NEW_CODE) 
@@ -3316,8 +3316,8 @@ static void dcmCloseBlob(void *image)
       else
 #endif /* defined (NEW_CODE) */ 
       {
-        length=ImportQuantumPixels(image,quantum_info,quantum_type,
-          data + y*bits_allocated/8*samples_per_pixel*width);
+        length=ImportQuantumPixels(image, (CacheView *)0, quantum_info, quantum_type, 
+          data + y*bits_allocated/8*samples_per_pixel*width, exception);
       }
       if (SyncImagePixels(image) == MagickFalse)
         break;
