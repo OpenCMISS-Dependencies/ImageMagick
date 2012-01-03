@@ -1487,8 +1487,12 @@ MagickExport size_t ImportQuantumPixels(Image *image,CacheView *image_view,
                 SetBluePixelComponent(q,GetRedPixelComponent(q));
                 q++;
                 p=PushShortPixel(endian,p,&pixel);
-                SetRedPixelComponent(q,ScaleAnyToQuantum((QuantumAny)
-                  (pixel >> 4),range));
+                if (endian == LSBEndian)
+                    SetRedPixelComponent(q,ScaleAnyToQuantum((QuantumAny)
+                        (pixel << 4),range));
+                else
+                    SetRedPixelComponent(q,ScaleAnyToQuantum((QuantumAny)
+                        (pixel >> 4),range));
                 SetGreenPixelComponent(q,GetRedPixelComponent(q));
                 SetBluePixelComponent(q,GetRedPixelComponent(q));
                 p+=quantum_info->pad;
@@ -1497,8 +1501,12 @@ MagickExport size_t ImportQuantumPixels(Image *image,CacheView *image_view,
               for (bit=0; bit < (ssize_t) (number_pixels % 2); bit++)
               {
                 p=PushShortPixel(endian,p,&pixel);
-                SetRedPixelComponent(q,ScaleAnyToQuantum((QuantumAny)
-                  (pixel >> 4),range));
+                if (endian == LSBEndian)
+                    SetRedPixelComponent(q,ScaleAnyToQuantum((QuantumAny)
+                        (pixel << 4),range));
+                else
+                    SetRedPixelComponent(q,ScaleAnyToQuantum((QuantumAny)
+                        (pixel >> 4),range));
                 SetGreenPixelComponent(q,GetRedPixelComponent(q));
                 SetBluePixelComponent(q,GetRedPixelComponent(q));
                 p+=quantum_info->pad;
@@ -1511,6 +1519,11 @@ MagickExport size_t ImportQuantumPixels(Image *image,CacheView *image_view,
           for (x=0; x < (ssize_t) number_pixels; x++)
           {
             p=PushQuantumPixel(&quantum_state,image->depth,p,&pixel);
+            if (quantum_info->format == SignedQuantumFormat)
+              if (pixel < (1<<11))
+                pixel = pixel + (1<<11);
+              else
+                pixel = pixel - (1<<11);
             SetRedPixelComponent(q,ScaleAnyToQuantum(pixel,range));
             SetGreenPixelComponent(q,GetRedPixelComponent(q));
             SetBluePixelComponent(q,GetRedPixelComponent(q));
