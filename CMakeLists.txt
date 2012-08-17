@@ -40,7 +40,7 @@
 # Set the minimum version of cmake required to 2.6
 CMAKE_MINIMUM_REQUIRED( VERSION 2.6 )
 
-PROJECT( ImageMagick_project )
+PROJECT( ImageMagick )
 
 MACRO( OPTION_WITH_DEFAULT OPTION_NAME OPTION_STRING OPTION_DEFAULT )
 	IF( NOT DEFINED ${OPTION_NAME} )
