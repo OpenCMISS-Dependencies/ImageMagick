@@ -3,14 +3,14 @@
 %                                                                             %
 %                                                                             %
 %                                                                             %
-%                            BBBB   M   M  PPPP                               %
-%                            B   B  MM MM  P   P                              %
-%                            BBBB   M M M  PPPP                               %
-%                            B   B  M   M  P                                  %
-%                            BBBB   M   M  P                                  %
+%                  A     N   N     A     L     Y   Y ZZZZZ EEEEE              %
+%                 A A    NN  N    A A    L      Y Y     Z  E                  %
+%                AAAAA   N N N   AAAAA   L       Y     Z   EEE                %
+%               A     A  N  NN  A     A  L       Y    Z    E                  %
+%              A       A N   N A       A LLLLL   Y   ZZZZZ EEEEE              %
 %                                                                             %
 %                                                                             %
-%             Read/Write Microsoft Windows Bitmap Image Format                %
+%                       Read/Write Analyze Image Format                       %
 %                                                                             %
 %                              Software Design                                %
 %                                John Cristy                                  %
@@ -77,7 +77,7 @@
 %                                                                             %
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %
-%  ReadAnalyzeImage() reads a Microsoft Windows bitmap image file, Version
+%  ReadAnalyzeImage() reads an Analyze image file, Version
 %  2, 3 (for Windows or NT), or 4, and  returns it.  It allocates the memory
 %  necessary for the new Image structure and returns a pointer to the new
 %  image.
@@ -280,13 +280,13 @@ static Image *ReadAnalyzeImage(const ImageInfo *image_info,ExceptionInfo *except
 %                                                                             %
 %                                                                             %
 %                                                                             %
-%   R e g i s t e r B M P I m a g e                                           %
+%   R e g i s t e r A N A L Y Z E I m a g e                                   %
 %                                                                             %
 %                                                                             %
 %                                                                             %
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %
-%  RegisterANALYZEImage() adds attributes for the BMP image format to
+%  RegisterANALYZEImage() adds attributes for the ANALYZE image format to
 %  the list of supported formats.  The attributes include the image format
 %  tag, a method to read and/or write the format, whether the format
 %  supports the saving of more than one frame to the same file or blob,
@@ -320,14 +320,14 @@ ModuleExport size_t RegisterANALYZEImage(void)
 %                                                                             %
 %                                                                             %
 %                                                                             %
-%   U n r e g i s t e r B M P I m a g e                                       %
+%   U n r e g i s t e r A N A L Y Z E I m a g e                               %
 %                                                                             %
 %                                                                             %
 %                                                                             %
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %
 %  UnregisterANALYZEImage() removes format registrations made by the
-%  BMP module from the list of supported formats.
+%  ANALYZE module from the list of supported formats.
 %
 %  The format of the UnregisterANALYZEImage method is:
 %
