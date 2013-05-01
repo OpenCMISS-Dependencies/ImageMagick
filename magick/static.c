@@ -36,7 +36,7 @@
 %
 %
 */
-
+
 /*
   Include declarations.
 */
@@ -47,7 +47,7 @@
 #include "magick/policy.h"
 #include "magick/static.h"
 #include "magick/string_.h"
-
+
 /*
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %                                                                             %
@@ -86,20 +86,20 @@ MagickExport MagickBooleanType InvokeStaticImageFilter(const char *tag,
   Image **image,const int argc,const char **argv,ExceptionInfo *exception)
 {
   PolicyRights
-    rights;
+	rights;
 
   assert(image != (Image **) NULL);
   assert((*image)->signature == MagickSignature);
   if ((*image)->debug != MagickFalse)
-    (void) LogMagickEvent(TraceEvent,GetMagickModule(),"%s",(*image)->filename);
+	(void) LogMagickEvent(TraceEvent,GetMagickModule(),"%s",(*image)->filename);
   rights=ReadPolicyRights;
   if (IsRightsAuthorized(FilterPolicyDomain,rights,tag) == MagickFalse)
-    {
-      errno=EPERM;
-      (void) ThrowMagickException(exception,GetMagickModule(),PolicyError,
-        "NotAuthorized","`%s'",tag);
-      return(MagickFalse);
-    }
+	{
+	  errno=EPERM;
+	  (void) ThrowMagickException(exception,GetMagickModule(),PolicyError,
+		"NotAuthorized","`%s'",tag);
+	  return(MagickFalse);
+	}
 #if defined(MAGICKCORE_BUILD_MODULES)
   (void) tag;
   (void) argc;
@@ -107,45 +107,45 @@ MagickExport MagickBooleanType InvokeStaticImageFilter(const char *tag,
   (void) exception;
 #else
   {
-    extern size_t
-      analyzeImage(Image **,const int,char **,ExceptionInfo *);
+	extern size_t
+	  analyzeImage(Image **,const int,char **,ExceptionInfo *);
 
-    ImageFilterHandler
-      *image_filter;
+	ImageFilterHandler
+	  *image_filter;
 
-    image_filter=(ImageFilterHandler *) NULL;
-    if (LocaleCompare("analyze",tag) == 0)
-      image_filter=(ImageFilterHandler *) analyzeImage;
-    if (image_filter == (ImageFilterHandler *) NULL)
-      (void) ThrowMagickException(exception,GetMagickModule(),ModuleError,
-        "UnableToLoadModule","`%s'",tag);
-    else
-      {
-        size_t
-          signature;
+	image_filter=(ImageFilterHandler *) NULL;
+	if (LocaleCompare("analyze",tag) == 0)
+	  image_filter=(ImageFilterHandler *) analyzeImage;
+	if (image_filter == (ImageFilterHandler *) NULL)
+	  (void) ThrowMagickException(exception,GetMagickModule(),ModuleError,
+		"UnableToLoadModule","`%s'",tag);
+	else
+	  {
+		size_t
+		  signature;
 
-        if ((*image)->debug != MagickFalse)
-          (void) LogMagickEvent(CoderEvent,GetMagickModule(),
-            "Invoking \"%s\" static image filter",tag);
-        signature=image_filter(image,argc,argv,exception);
-        if ((*image)->debug != MagickFalse)
-          (void) LogMagickEvent(CoderEvent,GetMagickModule(),"\"%s\" completes",
-            tag);
-        if (signature != MagickImageFilterSignature)
-          {
-            (void) ThrowMagickException(exception,GetMagickModule(),ModuleError,
-              "ImageFilterSignatureMismatch","`%s': %8lx != %8lx",tag,
-              (unsigned long) signature,(unsigned long)
-              MagickImageFilterSignature);
-            return(MagickFalse);
-          }
-      }
+		if ((*image)->debug != MagickFalse)
+		  (void) LogMagickEvent(CoderEvent,GetMagickModule(),
+			"Invoking \"%s\" static image filter",tag);
+		signature=image_filter(image,argc,argv,exception);
+		if ((*image)->debug != MagickFalse)
+		  (void) LogMagickEvent(CoderEvent,GetMagickModule(),"\"%s\" completes",
+			tag);
+		if (signature != MagickImageFilterSignature)
+		  {
+			(void) ThrowMagickException(exception,GetMagickModule(),ModuleError,
+			  "ImageFilterSignatureMismatch","`%s': %8lx != %8lx",tag,
+			  (unsigned long) signature,(unsigned long)
+			  MagickImageFilterSignature);
+			return(MagickFalse);
+		  }
+	  }
   }
 #endif
   return(MagickTrue);
 }
 #endif
-
+
 /*
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %                                                                             %
@@ -169,6 +169,7 @@ MagickExport void RegisterStaticModules(void)
 {
 #if !defined(MAGICKCORE_BUILD_MODULES)
   (void) RegisterAAIImage();
+  (void) RegisterANALYZEImage();
   (void) RegisterARTImage();
   (void) RegisterAVSImage();
   (void) RegisterBMPImage();
@@ -319,7 +320,7 @@ MagickExport void RegisterStaticModules(void)
   (void) RegisterYUVImage();
 #endif
 }
-
+
 /*
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %                                                                             %
@@ -343,6 +344,7 @@ MagickExport void UnregisterStaticModules(void)
 {
 #if !defined(MAGICKCORE_BUILD_MODULES)
   UnregisterAAIImage();
+  UnregisterANALYZEImage();
   UnregisterARTImage();
   UnregisterAVSImage();
   UnregisterBMPImage();
