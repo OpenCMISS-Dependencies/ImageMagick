@@ -1,12 +1,12 @@
 /*
   Copyright 1999-2011 ImageMagick Studio LLC, a non-profit organization
   dedicated to making software imaging solutions freely available.
-  
+
   You may not use this file except in compliance with the License.
   obtain a copy of the License at
-  
-    http://www.imagemagick.org/script/license.php
-  
+
+	http://www.imagemagick.org/script/license.php
+
   Unless required by applicable law or agreed to in writing, software
   distributed under the License is distributed on an "AS IS" BASIS,
   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -16,8 +16,8 @@
   MagickCore API methods prefix.
 
   nm .libs/libMagickCore.a | grep ' T ' | \
-    awk '{ printf("#define %s  PrependMagickMethod(%s)\n", $3, $3); }' | \
-    sort
+	awk '{ printf("#define %s  PrependMagickMethod(%s)\n", $3, $3); }' | \
+	sort
 */
 #ifndef _MAGICKCORE_METHOD_H
 #define _MAGICKCORE_METHOD_H
@@ -873,6 +873,7 @@ extern "C" {
 #define ReferencePixelCache  PrependMagickMethod(ReferencePixelCache)
 #define RegisterARTImage  PrependMagickMethod(RegisterARTImage)
 #define RegisterAVSImage  PrependMagickMethod(RegisterAVSImage)
+#define RegisterANALYZEImage  PrependMagickMethod(RegisterANALYZEImage)
 #define RegisterBMPImage  PrependMagickMethod(RegisterBMPImage)
 #define RegisterBRAILLEImage  PrependMagickMethod(RegisterBRAILLEImage)
 #define RegisterCALSImage  PrependMagickMethod(RegisterCALSImage)
@@ -1201,6 +1202,7 @@ extern "C" {
 #define UniqueImageColors  PrependMagickMethod(UniqueImageColors)
 #define UnlockSemaphoreInfo  PrependMagickMethod(UnlockSemaphoreInfo)
 #define UnmapBlob  PrependMagickMethod(UnmapBlob)
+#define UnregisterANALYZEImage  PrependMagickMethod(UnregisterANALYZEImage)
 #define UnregisterARTImage  PrependMagickMethod(UnregisterARTImage)
 #define UnregisterAVSImage  PrependMagickMethod(UnregisterAVSImage)
 #define UnregisterBMPImage  PrependMagickMethod(UnregisterBMPImage)
