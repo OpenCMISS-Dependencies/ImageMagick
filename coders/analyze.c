@@ -208,8 +208,6 @@ static Image *ReadAnalyzeImage(const ImageInfo *image_info,ExceptionInfo *except
   length=GetQuantumExtent(canvas_image,quantum_info,quantum_type);
   count=ReadBlob(image,length,pixels);
   number_pixels=GetImageExtent(image);
-  static int one = 0;
-  one++;
   for (y=0; y < (ssize_t) image->extract_info.height; y++)
   {
 	register const PixelPacket
@@ -247,10 +245,6 @@ static Image *ReadAnalyzeImage(const ImageInfo *image_info,ExceptionInfo *except
 		for (x=0; x < (ssize_t) image->columns; x++)
 		{
 			pa[x] = *p;
-			if (one == 4)
-			{
-				//printf("pixel = %.4f, %d\n", (float)p->red, p->red);
-			}
 			SetGrayPixelComponent(q,GetGrayPixelComponent(p));
 			p++;
 			q++;
