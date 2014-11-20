@@ -2768,6 +2768,9 @@ static void dcmCloseBlob(void *image)
   register unsigned long
     i;
 
+  register unsigned char
+    *p;
+
   register PixelPacket
     *q;
 
@@ -3116,7 +3119,10 @@ static void dcmCloseBlob(void *image)
 	{
 		for (i = 0 ; i < height*width ; i++)
 		{
-			bit_usage |= *((unsigned short *)data_ptr);
+			if (quantum_format == UnsignedQuantumFormat)
+				bit_usage |= *((unsigned short *)data_ptr);
+			else
+				bit_usage |= *((short *)data_ptr);
 			data_ptr += 2;
 		}
 	} break;
@@ -3178,7 +3184,10 @@ static void dcmCloseBlob(void *image)
 		  {
 		    for (i = 0 ; i < height*width ; i++)
 		    {
-		      *((unsigned short *)data_ptr) = *((unsigned short *)data_ptr) >> bit_shift;
+				if (quantum_format == UnsignedQuantumFormat)
+					*((unsigned short *)data_ptr) = *((unsigned short *)data_ptr) >> bit_shift;
+				else
+					*((short *)data_ptr) = *((short *)data_ptr) >> bit_shift;
 		      data_ptr += 2;
 		      *data_ptr = *data_ptr >> bit_shift; 
 		      data_ptr++;
@@ -3188,7 +3197,10 @@ static void dcmCloseBlob(void *image)
 		  {
 		    for (i = 0 ; i < height*width ; i++)
 		    {
-		      *((unsigned short *)data_ptr) = *((unsigned short *)data_ptr) << bit_shift;
+				if (quantum_format == UnsignedQuantumFormat)
+					*((unsigned short *)data_ptr) = *((unsigned short *)data_ptr) << bit_shift;
+				else
+					*((short *)data_ptr) = *((short *)data_ptr) << bit_shift;
 		      data_ptr += 2;
 		    }
 		  }
@@ -3238,27 +3250,22 @@ static void dcmCloseBlob(void *image)
       q=QueueAuthenticPixels(image, 0, y, image->columns, 1, exception); 
       if (q == (PixelPacket *) NULL)
         break;
-#if defined (NEW_CODE) 
       /* Handle some cases that aren't handled in ImportQuantumPixels
        * that are common. */
       if ((quantum_type == GrayQuantum) &&
         (quantum_format == SignedQuantumFormat)) 
       {
-    	  number_pixels = image->columns;
+    	  long number_pixels = image->columns;
     	  p = data + y*bits_allocated/8*samples_per_pixel*width;
     	  switch (quantum_depth)
     	  {
           case 8:
           {
             unsigned char pixel;
-
-            for (x=0; x < (long) number_pixels; x++)
+            long x;
+            for (x=0; x < number_pixels; x++)
             {
               p=PushCharPixel(p,&pixel);
-              if (pixel < 128)
-            	  pixel = pixel + 128;
-              else
-            	  pixel = pixel - 128;
               q->red=ScaleCharToQuantum(pixel);
               if (quantum_info->min_is_white != MagickFalse)
                 q->red=(Quantum) (QuantumRange-q->red);
@@ -3273,16 +3280,12 @@ static void dcmCloseBlob(void *image)
           {
             unsigned short
               pixel;
-
+            long x;
             if (quantum_info->min_is_white != MagickFalse)
               {
-                for (x=0; x < (long) number_pixels; x++)
+                for (x=0; x < number_pixels; x++)
                 {
                   p=PushShortPixel(image->endian,p,&pixel);
-                  if (pixel < 32768)
-                	  pixel = pixel + 32768;
-                  else
-                	  pixel = pixel - 32768;
                   q->red=(Quantum) (QuantumRange-ScaleShortToQuantum(pixel));
                   q->green=q->red;
                   q->blue=q->red;
@@ -3291,13 +3294,9 @@ static void dcmCloseBlob(void *image)
                 }
                 break;
               }
-            for (x=0; x < (long) number_pixels; x++)
+            for (x=0; x < number_pixels; x++)
             {
               p=PushShortPixel(image->endian,p,&pixel);
-              if (pixel < 32768)
-            	  pixel = pixel + 32768;
-              else
-            	  pixel = pixel - 32768;
               q->red=ScaleShortToQuantum(pixel);
               q->green=q->red;
               q->blue=q->red;
@@ -3314,7 +3313,6 @@ static void dcmCloseBlob(void *image)
     	  }
       }
       else
-#endif /* defined (NEW_CODE) */ 
       {
         length=ImportQuantumPixels(image, (CacheView *)0, quantum_info, quantum_type, 
           data + y*bits_allocated/8*samples_per_pixel*width, exception);
