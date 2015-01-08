@@ -53,7 +53,7 @@ extern MagickExport const LocaleInfo
   **GetLocaleInfoList(const char *,size_t *,ExceptionInfo *);
 
 extern MagickExport double
-  InterpretLocaleValue(const char *restrict,char **restrict);
+  InterpretLocaleValue(const char *restrict1,char **restrict2);
 
 extern MagickExport LinkedListInfo
   *DestroyLocaleOptions(LinkedListInfo *),
@@ -68,9 +68,9 @@ extern MagickExport ssize_t
     magick_attribute((format (printf,2,3))),
   FormatLocaleFileList(FILE *,const char *restrict,va_list)
     magick_attribute((format (printf,2,0))),
-  FormatLocaleString(char *restrict,const size_t,const char *restrict,...)
+  FormatLocaleString(char *restrict1,const size_t,const char *restrict2,...)
     magick_attribute((format (printf,3,4))),
-  FormatLocaleStringList(char *restrict,const size_t,const char *restrict,
+  FormatLocaleStringList(char *restrict1,const size_t,const char *restrict2,
     va_list) magick_attribute((format (printf,3,0)));
 
 extern MagickExport void
