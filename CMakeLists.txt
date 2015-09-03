@@ -121,8 +121,21 @@ install(EXPORT imagemagick-config
 include(CMakePackageConfigHelpers)
 WRITE_BASIC_PACKAGE_VERSION_FILE(${CMAKE_CURRENT_BINARY_DIR}/imagemagick-config-version.cmake
     COMPATIBILITY AnyNewerVersion)
+file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/imagemagick-config-dependencies.cmake 
+    "include(CMakeFindDependencyMacro)\r\n"
+	"set(${PROJECT_NAME}_IMPORT_PREFIX \${_IMPORT_PREFIX})\r\n"
+)
+file(APPEND ${CMAKE_CURRENT_BINARY_DIR}/imagemagick-config-dependencies.cmake "find_dependency(GDCM)\r\n")
+#file(APPEND ${CMAKE_CURRENT_BINARY_DIR}/imagemagick-config-dependencies.cmake "find_dependency(LAPACK)\r\n")
+#if (WITH_OPENMP)
+#    file(APPEND ${CMAKE_CURRENT_BINARY_DIR}/imagemagick-config-dependencies.cmake "find_dependency(OpenMP)\r\n")
+#endif()
+#if (WITH_SUPERLU AND NOT SUPERLU_INTERNAL)
+#    file(APPEND ${CMAKE_CURRENT_BINARY_DIR}/imagemagick-config-dependencies.cmake "find_dependency(SUPERLU)\r\n")
+#endif()
+file(APPEND ${CMAKE_CURRENT_BINARY_DIR}/imagemagick-config-dependencies.cmake "set(_IMPORT_PREFIX \${${PROJECT_NAME}_IMPORT_PREFIX})")
 install(FILES 
     ${CMAKE_CURRENT_BINARY_DIR}/imagemagick-config-version.cmake
-    #${CMAKE_CURRENT_BINARY_DIR}/hypre-config-dependencies.cmake
+    ${CMAKE_CURRENT_BINARY_DIR}/imagemagick-config-dependencies.cmake
     DESTINATION ${PACKAGE_CONFIG_DIR})
 
