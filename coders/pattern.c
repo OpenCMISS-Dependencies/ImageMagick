@@ -13,11 +13,11 @@
 %                      Read/Write Pattern Image Format                        %
 %                                                                             %
 %                              Software Design                                %
-%                                John Cristy                                  %
+%                                   Cristy                                    %
 %                                 May 2003                                    %
 %                                                                             %
 %                                                                             %
-%  Copyright 1999-2011 ImageMagick Studio LLC, a non-profit organization      %
+%  Copyright 1999-2016 ImageMagick Studio LLC, a non-profit organization      %
 %  dedicated to making software imaging solutions freely available.           %
 %                                                                             %
 %  You may not use this file except in compliance with the License.  You may  %
@@ -39,20 +39,20 @@
 /*
   Include declarations.
 */
-#include "magick/studio.h"
-#include "magick/blob.h"
-#include "magick/blob-private.h"
-#include "magick/exception.h"
-#include "magick/exception-private.h"
-#include "magick/image.h"
-#include "magick/image-private.h"
-#include "magick/list.h"
-#include "magick/magick.h"
-#include "magick/memory_.h"
-#include "magick/quantum-private.h"
-#include "magick/static.h"
-#include "magick/string_.h"
-#include "magick/module.h"
+#include "MagickCore/studio.h"
+#include "MagickCore/blob.h"
+#include "MagickCore/blob-private.h"
+#include "MagickCore/exception.h"
+#include "MagickCore/exception-private.h"
+#include "MagickCore/image.h"
+#include "MagickCore/image-private.h"
+#include "MagickCore/list.h"
+#include "MagickCore/magick.h"
+#include "MagickCore/memory_.h"
+#include "MagickCore/quantum-private.h"
+#include "MagickCore/static.h"
+#include "MagickCore/string_.h"
+#include "MagickCore/module.h"
 
 /*
   Bricks pattern.
@@ -583,7 +583,7 @@ static const unsigned char
 static const unsigned char
   Horizontal2Image[] =
   {
-    0x50, 0x34, 0x0A, 0x38, 0x20, 0x38, 0x0A, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 
+    0x50, 0x34, 0x0A, 0x38, 0x20, 0x38, 0x0A, 0xFF, 0x00, 0xFF, 0x00, 0xFF,
     0x00, 0xFF, 0x00
   };
 
@@ -593,9 +593,9 @@ static const unsigned char
 static const unsigned char
   Horizontal3Image[] =
   {
-    0x50, 0x34, 0x0A, 0x39, 0x20, 0x39, 0x0A, 0x00, 0x00, 0x00, 0x00, 0xFF, 
-    0x80, 0x00, 0x00, 0x00, 0x00, 0xFF, 0x80, 0x00, 0x00, 0x00, 0x00, 0xFF, 
-    0x80, 
+    0x50, 0x34, 0x0A, 0x39, 0x20, 0x39, 0x0A, 0x00, 0x00, 0x00, 0x00, 0xFF,
+    0x80, 0x00, 0x00, 0x00, 0x00, 0xFF, 0x80, 0x00, 0x00, 0x00, 0x00, 0xFF,
+    0x80,
   };
 
 /*
@@ -774,7 +774,7 @@ static const unsigned char
 static const unsigned char
   Vertical2Image[] =
   {
-    0x50, 0x34, 0x0A, 0x38, 0x20, 0x38, 0x0A, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 
+    0x50, 0x34, 0x0A, 0x38, 0x20, 0x38, 0x0A, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA,
     0xAA, 0xAA, 0xAA
   };
 
@@ -784,8 +784,8 @@ static const unsigned char
 static const unsigned char
   Vertical3Image[] =
   {
-    0x50, 0x34, 0x0A, 0x39, 0x20, 0x39, 0x0A, 0x24, 0x80, 0x24, 0x80, 0x24, 
-    0x80, 0x24, 0x80, 0x24, 0x80, 0x24, 0x80, 0x24, 0x80, 0x24, 0x80, 0x24, 
+    0x50, 0x34, 0x0A, 0x39, 0x20, 0x39, 0x0A, 0x24, 0x80, 0x24, 0x80, 0x24,
+    0x80, 0x24, 0x80, 0x24, 0x80, 0x24, 0x80, 0x24, 0x80, 0x24, 0x80, 0x24,
     0x80
   };
 
@@ -844,8 +844,8 @@ static const unsigned char
 typedef struct _PatternInfo
 {
   char
-    name[MaxTextExtent],
-    magick[MaxTextExtent];
+    name[MagickPathExtent],
+    magick[MagickPathExtent];
 
   const void
     *blob;
@@ -971,7 +971,7 @@ static Image *ReadPATTERNImage(const ImageInfo *image_info,
     if (LocaleCompare(blob_info->filename,PatternImageList[i].name) == 0)
       {
         (void) CopyMagickString(blob_info->magick,PatternImageList[i].magick,
-          MaxTextExtent);
+          MagickPathExtent);
         blob=PatternImageList[i].blob;
         extent=PatternImageList[i].extent;
         break;
@@ -988,10 +988,8 @@ static Image *ReadPATTERNImage(const ImageInfo *image_info,
         Tile pattern across image canvas.
       */
       pattern_image=image;
-      image=AcquireImage(blob_info);
-      image->background_color=pattern_image->background_color;
-      (void) SetImageBackgroundColor(image);
-      (void) TextureImage(image,pattern_image);
+      image=AcquireImage(image_info,exception);
+      (void) TextureImage(image,pattern_image,exception);
       pattern_image=DestroyImage(pattern_image);
     }
   blob_info=DestroyImageInfo(blob_info);
@@ -1025,11 +1023,9 @@ ModuleExport size_t RegisterPATTERNImage(void)
   MagickInfo
     *entry;
 
-  entry=SetMagickInfo("PATTERN");
+  entry=AcquireMagickInfo("PATTERN","PATTERN","Predefined pattern");
   entry->decoder=(DecodeImageHandler *) ReadPATTERNImage;
-  entry->adjoin=MagickFalse;
-  entry->description=ConstantString("Predefined pattern");
-  entry->module=ConstantString("PATTERN");
+  entry->flags^=CoderAdjoinFlag;
   (void) RegisterMagickInfo(entry);
   return(MagickImageCoderSignature);
 }

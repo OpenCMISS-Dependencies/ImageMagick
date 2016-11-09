@@ -13,11 +13,11 @@
 %                    Read/Write ImageMagick Image Format                      %
 %                                                                             %
 %                              Software Design                                %
-%                                John Cristy                                  %
+%                                   Cristy                                    %
 %                                 July 1992                                   %
 %                                                                             %
 %                                                                             %
-%  Copyright 1999-2011 ImageMagick Studio LLC, a non-profit organization      %
+%  Copyright 1999-2016 ImageMagick Studio LLC, a non-profit organization      %
 %  dedicated to making software imaging solutions freely available.           %
 %                                                                             %
 %  You may not use this file except in compliance with the License.  You may  %
@@ -39,24 +39,25 @@
 /*
   Include declarations.
 */
-#include "magick/studio.h"
-#include "magick/blob.h"
-#include "magick/blob-private.h"
-#include "magick/constitute.h"
-#include "magick/exception.h"
-#include "magick/exception-private.h"
-#include "magick/image.h"
-#include "magick/image-private.h"
-#include "magick/list.h"
-#include "magick/magick.h"
-#include "magick/memory_.h"
-#include "magick/resource_.h"
-#include "magick/quantum-private.h"
-#include "magick/static.h"
-#include "magick/string_.h"
-#include "magick/module.h"
-#include "magick/transform.h"
-#include "magick/utility.h"
+#include "MagickCore/studio.h"
+#include "MagickCore/blob.h"
+#include "MagickCore/blob-private.h"
+#include "MagickCore/constitute.h"
+#include "MagickCore/exception.h"
+#include "MagickCore/exception-private.h"
+#include "MagickCore/image.h"
+#include "MagickCore/image-private.h"
+#include "MagickCore/list.h"
+#include "MagickCore/magick.h"
+#include "MagickCore/memory_.h"
+#include "MagickCore/resource_.h"
+#include "MagickCore/quantum-private.h"
+#include "MagickCore/static.h"
+#include "MagickCore/string_.h"
+#include "MagickCore/module.h"
+#include "MagickCore/transform.h"
+#include "MagickCore/utility.h"
+#include "MagickCore/utility-private.h"
 
 /*
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -119,24 +120,22 @@ static MagickBooleanType IsSFW(const unsigned char *magick,const size_t length)
 %
 */
 
-static unsigned char *SFWScan(unsigned char *p,const unsigned char *q,
-  const unsigned char *target,const int length)
+static unsigned char *SFWScan(const unsigned char *p,const unsigned char *q,
+  const unsigned char *target,const size_t length)
 {
   register ssize_t
     i;
 
-  for ( ; p < q; p++)
-  {
-    if (*p != *target)
-      continue;
-    if (length == 1)
-      return(p);
-    for (i=1; i < length; i++)
-      if (*(p+i) != *(target+i))
-        break;
-    if (i == length)
-      return(p);
-  }
+  if ((p+length) < q)
+    while (p < q)
+    {
+      for (i=0; i < (ssize_t) length; i++)
+        if (p[i] != target[i])
+          break;
+      if (i == (ssize_t) length)
+        return((unsigned char *) p);
+      p++;
+    }
   return((unsigned char *) NULL);
 }
 
@@ -206,6 +205,7 @@ static Image *ReadSFWImage(const ImageInfo *image_info,ExceptionInfo *exception)
 
   Image
     *flipped_image,
+    *jpeg_image,
     *image;
 
   ImageInfo
@@ -235,13 +235,13 @@ static Image *ReadSFWImage(const ImageInfo *image_info,ExceptionInfo *exception)
     Open image file.
   */
   assert(image_info != (const ImageInfo *) NULL);
-  assert(image_info->signature == MagickSignature);
+  assert(image_info->signature == MagickCoreSignature);
   if (image_info->debug != MagickFalse)
     (void) LogMagickEvent(TraceEvent,GetMagickModule(),"%s",
       image_info->filename);
   assert(exception != (ExceptionInfo *) NULL);
-  assert(exception->signature == MagickSignature);
-  image=AcquireImage(image_info);
+  assert(exception->signature == MagickCoreSignature);
+  image=AcquireImage(image_info,exception);
   status=OpenBlob(image_info,image,ReadBinaryBlobMode,exception);
   if (status == MagickFalse)
     {
@@ -251,15 +251,17 @@ static Image *ReadSFWImage(const ImageInfo *image_info,ExceptionInfo *exception)
   /*
     Read image into a buffer.
   */
+  if (GetBlobSize(image) != (size_t) GetBlobSize(image))
+    ThrowReaderException(ResourceLimitError,"MemoryAllocationFailed");
   buffer=(unsigned char *) AcquireQuantumMemory((size_t) GetBlobSize(image),
     sizeof(*buffer));
   if (buffer == (unsigned char *) NULL)
     ThrowReaderException(ResourceLimitError,"MemoryAllocationFailed");
   count=ReadBlob(image,(size_t) GetBlobSize(image),buffer);
-  if ((count == 0) || (LocaleNCompare((char *) buffer,"SFW",3) != 0))
+  if ((count != (ssize_t) GetBlobSize(image)) ||
+      (LocaleNCompare((char *) buffer,"SFW",3) != 0))
     ThrowReaderException(CorruptImageError,"ImproperImageHeader");
   (void) CloseBlob(image);
-  image=DestroyImage(image);
   /*
     Find the start of the JFIF data
   */
@@ -277,13 +279,18 @@ static Image *ReadSFWImage(const ImageInfo *image_info,ExceptionInfo *exception)
     Translate remaining markers.
   */
   offset=header+2;
-  offset+=(offset[2] << 8)+offset[3]+2;
+  offset+=(((unsigned int) offset[2]) << 8)+offset[3]+2;
   for ( ; ; )
   {
+    if ((offset+4) > (buffer+count-1))
+      {
+        buffer=(unsigned char *) RelinquishMagickMemory(buffer);
+        ThrowReaderException(ResourceLimitError,"MemoryAllocationFailed");
+      }
     TranslateSFWMarker(offset);
     if (offset[1] == 0xda)
       break;
-    offset+=(offset[2] << 8)+offset[3]+2;
+    offset+=(((unsigned int) offset[2]) << 8)+offset[3]+2;
   }
   offset--;
   data=SFWScan(offset,buffer+count-1,(const unsigned char *) "\377\311",2);
@@ -301,13 +308,13 @@ static Image *ReadSFWImage(const ImageInfo *image_info,ExceptionInfo *exception)
   file=(FILE *) NULL;
   unique_file=AcquireUniqueFileResource(read_info->filename);
   if (unique_file != -1)
-    file=OpenMagickStream(read_info->filename,"wb");
+    file=fopen_utf8(read_info->filename,"wb");
   if ((unique_file == -1) || (file == (FILE *) NULL))
     {
       buffer=(unsigned char *) RelinquishMagickMemory(buffer);
       read_info=DestroyImageInfo(read_info);
       (void) CopyMagickString(image->filename,read_info->filename,
-        MaxTextExtent);
+        MagickPathExtent);
       ThrowFileException(exception,FileOpenError,"UnableToCreateTemporaryFile",
         image->filename);
       image=DestroyImageList(image);
@@ -317,19 +324,20 @@ static Image *ReadSFWImage(const ImageInfo *image_info,ExceptionInfo *exception)
   (void) extent;
   extent=fwrite(HuffmanTable,1,sizeof(HuffmanTable)/sizeof(*HuffmanTable),file);
   extent=fwrite(offset+1,(size_t) (data-offset),1,file);
-  status=ferror(file) == -1 ? MagickFalse : MagickTrue;
+  status=ferror(file) != 0 ? MagickFalse : MagickTrue;
   (void) fclose(file);
+  (void) close(unique_file);
   buffer=(unsigned char *) RelinquishMagickMemory(buffer);
   if (status == MagickFalse)
     {
       char
         *message;
 
-      (void) remove(read_info->filename);
+      (void) remove_utf8(read_info->filename);
       read_info=DestroyImageInfo(read_info);
       message=GetExceptionMessage(errno);
-      (void) ThrowMagickException(&image->exception,GetMagickModule(),
-        FileOpenError,"UnableToWriteFile","`%s': %s",image->filename,message);
+      (void) ThrowMagickException(exception,GetMagickModule(),FileOpenError,
+        "UnableToWriteFile","`%s': %s",image->filename,message);
       message=DestroyString(message);
       image=DestroyImageList(image);
       return((Image *) NULL);
@@ -337,11 +345,18 @@ static Image *ReadSFWImage(const ImageInfo *image_info,ExceptionInfo *exception)
   /*
     Read JPEG image.
   */
-  image=ReadImage(read_info,exception);
+  jpeg_image=ReadImage(read_info,exception);
   (void) RelinquishUniqueFileResource(read_info->filename);
   read_info=DestroyImageInfo(read_info);
-  if (image == (Image *) NULL)
-    return(GetFirstImageInList(image));
+  if (jpeg_image == (Image *) NULL)
+    {
+      image=DestroyImageList(image);
+      return(jpeg_image);
+    }
+  (void) CopyMagickString(jpeg_image->filename,image->filename,MagickPathExtent);
+  (void) CopyMagickString(jpeg_image->magick,image->magick,MagickPathExtent);
+  image=DestroyImageList(image);
+  image=jpeg_image;
   /*
     Correct image orientation.
   */
@@ -383,12 +398,10 @@ ModuleExport size_t RegisterSFWImage(void)
   MagickInfo
     *entry;
 
-  entry=SetMagickInfo("SFW");
+  entry=AcquireMagickInfo("SFW","SFW","Seattle Film Works");
   entry->decoder=(DecodeImageHandler *) ReadSFWImage;
   entry->magick=(IsImageFormatHandler *) IsSFW;
-  entry->adjoin=MagickFalse;
-  entry->description=ConstantString("Seattle Film Works");
-  entry->module=ConstantString("SFW");
+  entry->flags^=CoderAdjoinFlag;
   (void) RegisterMagickInfo(entry);
   return(MagickImageCoderSignature);
 }

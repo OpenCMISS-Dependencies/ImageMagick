@@ -13,11 +13,11 @@
 %                    Read/Write Image from/to X11 Server.                     %
 %                                                                             %
 %                              Software Design                                %
-%                                John Cristy                                  %
+%                                   Cristy                                    %
 %                                 July 1992                                   %
 %                                                                             %
 %                                                                             %
-%  Copyright 1999-2011 ImageMagick Studio LLC, a non-profit organization      %
+%  Copyright 1999-2016 ImageMagick Studio LLC, a non-profit organization      %
 %  dedicated to making software imaging solutions freely available.           %
 %                                                                             %
 %  You may not use this file except in compliance with the License.  You may  %
@@ -39,33 +39,34 @@
 /*
   Include declarations.
 */
-#include "magick/studio.h"
-#include "magick/blob.h"
-#include "magick/blob-private.h"
-#include "magick/client.h"
-#include "magick/display.h"
-#include "magick/exception.h"
-#include "magick/exception-private.h"
-#include "magick/image.h"
-#include "magick/image-private.h"
-#include "magick/list.h"
-#include "magick/magick.h"
-#include "magick/memory_.h"
-#include "magick/option.h"
-#include "magick/quantum-private.h"
-#include "magick/static.h"
-#include "magick/string_.h"
-#include "magick/module.h"
-#include "magick/utility.h"
-#include "magick/xwindow.h"
-#include "magick/xwindow-private.h"
+#include "MagickCore/studio.h"
+#include "MagickCore/blob.h"
+#include "MagickCore/blob-private.h"
+#include "MagickCore/client.h"
+#include "MagickCore/display.h"
+#include "MagickCore/exception.h"
+#include "MagickCore/exception-private.h"
+#include "MagickCore/image.h"
+#include "MagickCore/image-private.h"
+#include "MagickCore/list.h"
+#include "MagickCore/magick.h"
+#include "MagickCore/memory_.h"
+#include "MagickCore/option.h"
+#include "MagickCore/quantum-private.h"
+#include "MagickCore/static.h"
+#include "MagickCore/string_.h"
+#include "MagickCore/module.h"
+#include "MagickCore/token.h"
+#include "MagickCore/utility.h"
+#include "MagickCore/xwindow.h"
+#include "MagickCore/xwindow-private.h"
 
 /*
   Forward declarations.
 */
 #if defined(MAGICKCORE_X11_DELEGATE)
 static MagickBooleanType
-  WriteXImage(const ImageInfo *,Image *);
+  WriteXImage(const ImageInfo *,Image *,ExceptionInfo *);
 #endif
 
 #if defined(MAGICKCORE_X11_DELEGATE)
@@ -95,21 +96,14 @@ static MagickBooleanType
 */
 static Image *ReadXImage(const ImageInfo *image_info,ExceptionInfo *exception)
 {
-  const char
-    *option;
-
   XImportInfo
     ximage_info;
 
   (void) exception;
   XGetImportInfo(&ximage_info);
-  option=GetImageOption(image_info,"x:screen");
-  if (option != (const char *) NULL)
-    ximage_info.screen=IsMagickTrue(option);
-  option=GetImageOption(image_info,"x:silent");
-  if (option != (const char *) NULL)
-    ximage_info.silent=IsMagickTrue(option);
-  return(XImportImage(image_info,&ximage_info));
+  ximage_info.screen=IsStringTrue(GetImageOption(image_info,"x:screen"));
+  ximage_info.silent=IsStringTrue(GetImageOption(image_info,"x:silent"));
+  return(XImportImage(image_info,&ximage_info,exception));
 }
 #endif
 
@@ -141,14 +135,12 @@ ModuleExport size_t RegisterXImage(void)
   MagickInfo
     *entry;
 
-  entry=SetMagickInfo("X");
+  entry=AcquireMagickInfo("X","X","X Image");
 #if defined(MAGICKCORE_X11_DELEGATE)
   entry->decoder=(DecodeImageHandler *) ReadXImage;
   entry->encoder=(EncodeImageHandler *) WriteXImage;
 #endif
   entry->format_type=ImplicitFormatType;
-  entry->description=ConstantString("X Image");
-  entry->module=ConstantString("X");
   (void) RegisterMagickInfo(entry);
   return(MagickImageCoderSignature);
 }
@@ -192,7 +184,8 @@ ModuleExport void UnregisterXImage(void)
 %
 %  The format of the WriteXImage method is:
 %
-%      MagickBooleanType WriteXImage(const ImageInfo *image_info,Image *image)
+%      MagickBooleanType WriteXImage(const ImageInfo *image_info,
+%        Image *image,ExceptionInfo *exception)
 %
 %  A description of each parameter follows.
 %
@@ -200,8 +193,11 @@ ModuleExport void UnregisterXImage(void)
 %
 %    o image:  The image.
 %
+%    o exception: return any errors or warnings in this structure.
+%
 */
-static MagickBooleanType WriteXImage(const ImageInfo *image_info,Image *image)
+static MagickBooleanType WriteXImage(const ImageInfo *image_info,Image *image,
+  ExceptionInfo *exception)
 {
-  return(DisplayImages(image_info,image));
+  return(DisplayImages(image_info,image,exception));
 }

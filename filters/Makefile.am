@@ -1,4 +1,4 @@
-#  Copyright 1999-2011 ImageMagick Studio LLC, a non-profit organization
+#  Copyright 1999-2016 ImageMagick Studio LLC, a non-profit organization
 #  dedicated to making software imaging solutions freely available.
 #
 #  You may not use this file except in compliance with the License.  You may
@@ -17,7 +17,9 @@
 # Where filter modules get installed
 filtersdir = $(FILTER_PATH)
 
-MAGICK_FILTER_SRCS = \
+MAGICK_FILTER_CPPFLAGS = $(AM_CPPFLAGS)
+
+MAGICKCORE_FILTER_SRCS = \
 	filters/analyze.c
 
 if WITH_MODULES
@@ -26,9 +28,10 @@ filters_LTLIBRARIES = \
 else
 filters_LTLIBRARIES =
 endif # WITH_MODULES
+filters_CPPFLAGS = $(MAGICK_FILTER_CPPFLAGS)
 
 # analyze filter module
 filters_analyze_la_SOURCES      = filters/analyze.c
-filters_analyze_la_CPPFLAGS     = $(MODULE_EXTRA_CPPFLAGS)
+filters_analyze_la_CPPFLAGS     = $(MAGICK_FILTER_CPPFLAGS)
 filters_analyze_la_LDFLAGS      = $(MODULECOMMONFLAGS)
 filters_analyze_la_LIBADD       = $(MAGICKCORE_LIBS) $(MATH_LIBS)

@@ -1,6 +1,7 @@
 // This may look like C code, but it is really -*- C++ -*-
 //
 // Copyright Bob Friesenhahn, 1999, 2002
+// Copyright Dirk Lemstra 2013-2016
 //
 // Implementation of STL classes and functions
 //
@@ -8,6 +9,7 @@
 #define MAGICKCORE_IMPLEMENTATION  1
 #define MAGICK_PLUSPLUS_IMPLEMENTATION 1
 
+#include <Magick++/Functions.h>
 #include <Magick++/Image.h>
 #include <Magick++/STL.h>
 
@@ -169,28 +171,28 @@ void Magick::cdlImage::operator()( Image &image_ ) const
   image_.cdl( _cdl.c_str() );
 }
 
-// Colorize image using pen color at specified percent opacity
-Magick::colorizeImage::colorizeImage( const unsigned int opacityRed_,
-                                      const unsigned int opacityGreen_,
-                                      const unsigned int opacityBlue_,
+// Colorize image using pen color at specified percent alpha
+Magick::colorizeImage::colorizeImage( const unsigned int alphaRed_,
+                                      const unsigned int alphaGreen_,
+                                      const unsigned int alphaBlue_,
                                       const Magick::Color &penColor_ )
-  : _opacityRed ( opacityRed_ ),
-    _opacityGreen ( opacityGreen_ ),
-    _opacityBlue ( opacityBlue_ ),
+  : _alphaRed ( alphaRed_ ),
+    _alphaGreen ( alphaGreen_ ),
+    _alphaBlue ( alphaBlue_ ),
     _penColor( penColor_ )
 {
 }
-Magick::colorizeImage::colorizeImage( const unsigned int opacity_,
+Magick::colorizeImage::colorizeImage( const unsigned int alpha_,
                                       const Magick::Color &penColor_ )
-  : _opacityRed ( opacity_ ),
-    _opacityGreen ( opacity_ ),
-    _opacityBlue ( opacity_ ),
+  : _alphaRed ( alpha_ ),
+    _alphaGreen ( alpha_ ),
+    _alphaBlue ( alpha_ ),
     _penColor( penColor_ )
 {
 }
 void Magick::colorizeImage::operator()( Magick::Image &image_ ) const
 {
-  image_.colorize( _opacityRed, _opacityGreen, _opacityBlue, _penColor );
+  image_.colorize( _alphaRed, _alphaGreen, _alphaBlue, _penColor );
 }
 
 // Apply a color matrix to the image channels.  The user supplied
@@ -295,7 +297,7 @@ void Magick::despeckleImage::operator()( Magick::Image &image_ ) const
 // mapping color lookups of the source image to a new destination image
 // usally of the same size as the source image, unless 'bestfit' is set to
 // true.
-Magick::distortImage::distortImage( const Magick::DistortImageMethod method_,
+Magick::distortImage::distortImage( const Magick::DistortMethod method_,
                                     const size_t number_arguments_,
                                     const double *arguments_,
                                     const bool bestfit_ )
@@ -305,7 +307,7 @@ Magick::distortImage::distortImage( const Magick::DistortImageMethod method_,
     _bestfit( bestfit_ )
 {
 }
-Magick::distortImage::distortImage( const Magick::DistortImageMethod method_,
+Magick::distortImage::distortImage( const Magick::DistortMethod method_,
                                     const size_t number_arguments_,
                                     const double *arguments_ )
   : _method ( method_ ),
@@ -325,7 +327,7 @@ Magick::drawImage::drawImage( const Magick::Drawable &drawable_ )
 {
   _drawableList.push_back( drawable_ );
 }
-Magick::drawImage::drawImage( const std::list<Magick::Drawable> &drawable_ )
+Magick::drawImage::drawImage( const std::vector<Magick::Drawable> &drawable_ )
   : _drawableList( drawable_ )
 {
 }
@@ -397,115 +399,120 @@ void Magick::flipImage::operator()( Magick::Image &image_ ) const
   image_.flip( );
 }
 
-// Flood-fill image with color
-// Flood-fill color across pixels starting at target-pixel and
-// stopping at pixels matching specified border color.  Uses current
-// fuzz setting when determining color match.
-Magick::floodFillColorImage::floodFillColorImage( const ssize_t x_,
-                                                  const ssize_t y_,
-                                                  const Magick::Color &fillColor_ )
-  : _x(x_),
+Magick::floodFillAlphaImage::floodFillAlphaImage(const ssize_t x_,
+  const ssize_t y_,const unsigned int alpha_,const Color &target_,
+  const bool invert_)
+  : _target(target_),
+    _alpha(alpha_),
+    _x(x_),
     _y(y_),
-    _fillColor(fillColor_),
-    _borderColor()
+    _invert(invert_)
 {
-}
-Magick::floodFillColorImage::floodFillColorImage( const Magick::Geometry &point_,
-                                                  const Magick::Color &fillColor_ )
-  : _x(point_.xOff()),
-    _y(point_.yOff()),
-    _fillColor(fillColor_),
-    _borderColor()
-{
-}
-// Flood-fill color across pixels starting at target-pixel and
-// stopping at pixels matching specified border color.  Uses current
-// fuzz setting when determining color match.
-Magick::floodFillColorImage::floodFillColorImage( const ssize_t x_,
-                                                  const ssize_t y_,
-                                                  const Magick::Color &fillColor_,
-                                                  const Magick::Color &borderColor_ )
-  : _x(x_),
-    _y(y_),
-    _fillColor(fillColor_),
-    _borderColor(borderColor_)
-{
-}
-Magick::floodFillColorImage::floodFillColorImage( const Geometry &point_,
-                                                  const Color &fillColor_,
-                                                  const Color &borderColor_ )
-  : _x(point_.xOff()),
-    _y(point_.yOff()),
-    _fillColor(fillColor_),
-    _borderColor(borderColor_)
-{
-}
-void Magick::floodFillColorImage::operator()( Magick::Image &image_ ) const
-{
-  if ( _borderColor.isValid() )
-    {
-      image_.floodFillColor( _x, _y, _fillColor, _borderColor );
-    }
-  else
-    {
-      image_.floodFillColor( _x, _y, _fillColor );
-    }
 }
 
-// Flood-fill image with texture
+void Magick::floodFillAlphaImage::operator()(Magick::Image &image_) const
+{
+  image_.floodFillAlpha(_x,_y,_alpha,_target,_invert);
+}
 
-// Flood-fill texture across pixels that match the color of the target
-// pixel and are neighbors of the target pixel.  Uses current fuzz
-// setting when determining color match.
-Magick::floodFillTextureImage::floodFillTextureImage( const ssize_t x_,
-                                                      const ssize_t y_,
-                                                      const Magick::Image &texture_ )
+Magick::floodFillColorImage::floodFillColorImage(const ssize_t x_,
+  const ssize_t y_,const Magick::Color &fillColor_,const bool invert_)
   : _x(x_),
     _y(y_),
-    _texture(texture_),
-    _borderColor()
+    _fillColor(fillColor_),
+    _borderColor(),
+    _invert(invert_)
 {
 }
-Magick::floodFillTextureImage::floodFillTextureImage( const Magick::Geometry &point_,
-                                                      const Magick::Image &texture_ )
+
+Magick::floodFillColorImage::floodFillColorImage(
+  const Magick::Geometry &point_,const Magick::Color &fillColor_,
+  const bool invert_)
   : _x(point_.xOff()),
     _y(point_.yOff()),
-    _texture(texture_),
-    _borderColor()
+    _fillColor(fillColor_),
+    _borderColor(),
+    _invert(invert_)
 {
 }
-// Flood-fill texture across pixels starting at target-pixel and
-// stopping at pixels matching specified border color.  Uses current
-// fuzz setting when determining color match.
-Magick::floodFillTextureImage::floodFillTextureImage( const ssize_t x_,
-                                                      const ssize_t y_,
-                                                      const Magick::Image &texture_,
-                                                      const Magick::Color &borderColor_ )
+
+Magick::floodFillColorImage::floodFillColorImage(const ssize_t x_,
+  const ssize_t y_,const Magick::Color &fillColor_,
+  const Magick::Color &borderColor_,const bool invert_)
   : _x(x_),
     _y(y_),
-    _texture(texture_),
-    _borderColor(borderColor_)
+    _fillColor(fillColor_),
+    _borderColor(borderColor_),
+    _invert(invert_)
 {
 }
-Magick::floodFillTextureImage::floodFillTextureImage( const Magick::Geometry &point_,
-                                                      const Magick::Image &texture_,
-                                                      const Magick::Color &borderColor_ )
+
+Magick::floodFillColorImage::floodFillColorImage(const Geometry &point_,
+  const Color &fillColor_,const Color &borderColor_,const bool invert_)
   : _x(point_.xOff()),
     _y(point_.yOff()),
-    _texture(texture_),
-    _borderColor(borderColor_)
+    _fillColor(fillColor_),
+    _borderColor(borderColor_),
+    _invert(invert_)
 {
 }
-void Magick::floodFillTextureImage::operator()( Magick::Image &image_ ) const
+void Magick::floodFillColorImage::operator()(Magick::Image &image_) const
 {
-  if ( _borderColor.isValid() )
-    {
-      image_.floodFillTexture( _x, _y, _texture, _borderColor );
-    }
+  if (_borderColor.isValid())
+    image_.floodFillColor(_x,_y,_fillColor,_borderColor,_invert);
   else
-    {
-      image_.floodFillTexture( _x, _y, _texture );
-    }
+    image_.floodFillColor(_x,_y,_fillColor,_invert);
+}
+
+Magick::floodFillTextureImage::floodFillTextureImage(const ssize_t x_,
+  const ssize_t y_,const Magick::Image &texture_,const bool invert_)
+  : _x(x_),
+    _y(y_),
+    _texture(texture_),
+    _borderColor(),
+    _invert(invert_)
+{
+}
+
+Magick::floodFillTextureImage::floodFillTextureImage(
+  const Magick::Geometry &point_,const Magick::Image &texture_,
+  const bool invert_)
+  : _x(point_.xOff()),
+    _y(point_.yOff()),
+    _texture(texture_),
+    _borderColor(),
+    _invert(invert_)
+{
+}
+
+Magick::floodFillTextureImage::floodFillTextureImage(const ssize_t x_,
+  const ssize_t y_,const Magick::Image &texture_,
+  const Magick::Color &borderColor_,const bool invert_)
+  : _x(x_),
+    _y(y_),
+    _texture(texture_),
+    _borderColor(borderColor_),
+    _invert(invert_)
+{
+}
+
+Magick::floodFillTextureImage::floodFillTextureImage(
+  const Magick::Geometry &point_,const Magick::Image &texture_,
+  const Magick::Color &borderColor_,const bool invert_)
+  : _x(point_.xOff()),
+    _y(point_.yOff()),
+    _texture(texture_),
+    _borderColor(borderColor_),
+    _invert(invert_)
+{
+}
+
+void Magick::floodFillTextureImage::operator()(Magick::Image &image_) const
+{
+  if (_borderColor.isValid())
+    image_.floodFillTexture(_x,_y,_texture,_borderColor,_invert);
+  else
+    image_.floodFillTexture(_x,_y,_texture,_invert);
 }
 
 // Flop image (reflect each scanline in the horizontal direction)
@@ -639,22 +646,6 @@ void Magick::levelImage::operator()( Magick::Image &image_ ) const
   image_.level( _black_point, _white_point, _mid_point );
 }
 
-// Level image channel
-Magick::levelChannelImage::levelChannelImage( const Magick::ChannelType channel,                                              const double black_point,
-                                              const double white_point,
-                                              const double mid_point )
-  : _channel(channel),
-    _black_point(black_point),
-    _white_point(white_point),
-    _mid_point(mid_point)
-{
-}
-
-void Magick::levelChannelImage::operator()( Magick::Image &image_ ) const
-{
-  image_.levelChannel( _channel, _black_point, _white_point, _mid_point );
-}
-
 // Magnify image by integral size
 Magick::magnifyImage::magnifyImage( void )
 {
@@ -676,30 +667,13 @@ void Magick::mapImage::operator()( Magick::Image &image_ ) const
   image_.map( _mapImage, _dither );
 }
 
-// Floodfill designated area with a matte value
-Magick::matteFloodfillImage::matteFloodfillImage( const Color &target_ ,
-                                                  const unsigned int matte_,
-                                                  const ssize_t x_, const ssize_t y_,
-                                                  const PaintMethod method_ )
-  : _target( target_ ),
-    _matte( matte_ ),
-    _x( x_ ),
-    _y( y_ ),
-    _method( method_ )
-{
-}
-void Magick::matteFloodfillImage::operator()( Magick::Image &image_ ) const
-{
-  image_.matteFloodfill( _target, _matte, _x, _y, _method );
-}
-
 // Filter image by replacing each pixel component with the median
 // color in a circular neighborhood
-Magick::medianFilterImage::medianFilterImage( const double radius_  )
+Magick::medianConvolveImage::medianConvolveImage( const double radius_  )
   : _radius( radius_ )
 {
 }
-void Magick::medianFilterImage::operator()( Magick::Image &image_ ) const
+void Magick::medianConvolveImage::operator()( Magick::Image &image_ ) const
 {
   image_.medianFilter( _radius );
 }
@@ -758,19 +732,19 @@ void Magick::oilPaintImage::operator()( Magick::Image &image_ ) const
   image_.oilPaint( _radius );
 }
 
-// Set or attenuate the image opacity channel. If the image pixels are
-// opaque then they are set to the specified opacity value, otherwise
-// they are blended with the supplied opacity value.  The value of
-// opacity_ ranges from 0 (completely opaque) to QuantumRange. The defines
-// OpaqueOpacity and TransparentOpacity are available to specify
+// Set or attenuate the image alpha channel. If the image pixels are
+// opaque then they are set to the specified alpha value, otherwise
+// they are blended with the supplied alpha value.  The value of
+// alpha_ ranges from 0 (completely opaque) to QuantumRange. The defines
+// OpaqueAlpha and TransparentAlpha are available to specify
 // completely opaque or completely transparent, respectively.
-Magick::opacityImage::opacityImage( const unsigned int opacity_ )
-  : _opacity( opacity_ )
+Magick::alphaImage::alphaImage( const unsigned int alpha_ )
+  : _alpha( alpha_ )
 {
 }
-void Magick::opacityImage::operator()( Magick::Image &image_ ) const
+void Magick::alphaImage::operator()( Magick::Image &image_ ) const
 {
-  image_.opacity( _opacity );
+  image_.alpha( _alpha );
 }
 
 // Change color of opaque pixel to specified pen color.
@@ -806,6 +780,82 @@ Magick::raiseImage::raiseImage( const Magick::Geometry &geometry_ ,
 void Magick::raiseImage::operator()( Magick::Image &image_ ) const
 {
   image_.raise( _geometry, _raisedFlag );
+}
+
+Magick::ReadOptions::ReadOptions(void)
+  : _imageInfo(static_cast<ImageInfo*>(AcquireMagickMemory(
+      sizeof(ImageInfo)))),
+    _quiet(false)
+{
+  GetImageInfo(_imageInfo);
+}
+
+Magick::ReadOptions::ReadOptions(const Magick::ReadOptions& options_)
+  : _imageInfo(CloneImageInfo(options_._imageInfo)),
+    _quiet(false)
+{
+}
+
+Magick::ReadOptions::~ReadOptions()
+{
+  _imageInfo=DestroyImageInfo(_imageInfo);
+}
+
+void Magick::ReadOptions::density(const Magick::Geometry &density_)
+{
+  if (!density_.isValid())
+    _imageInfo->density=(char *) RelinquishMagickMemory(_imageInfo->density);
+  else
+    Magick::CloneString(&_imageInfo->density,density_);
+}
+
+Magick::Geometry Magick::ReadOptions::density(void) const
+{
+  if (_imageInfo->density)
+    return(Geometry(_imageInfo->density));
+
+  return(Geometry());
+}
+
+void Magick::ReadOptions::depth(size_t depth_)
+{
+  _imageInfo->depth=depth_;
+}
+
+size_t Magick::ReadOptions::depth(void) const
+{
+  return(_imageInfo->depth);
+}
+
+void Magick::ReadOptions::size(const Geometry &geometry_)
+{
+  _imageInfo->size=(char *) RelinquishMagickMemory(_imageInfo->size);
+
+  if ( geometry_.isValid() )
+    Magick::CloneString(&_imageInfo->size,geometry_);
+}
+
+Magick::Geometry Magick::ReadOptions::size(void) const
+{
+  if (_imageInfo->size)
+    return(Geometry(_imageInfo->size));
+
+  return(Geometry());
+}
+
+void Magick::ReadOptions::quiet(const bool quiet_)
+{
+  _quiet=quiet_;
+}
+
+bool Magick::ReadOptions::quiet(void) const
+{
+   return(_quiet);
+}
+
+MagickCore::ImageInfo *Magick::ReadOptions::imageInfo(void)
+{
+  return(_imageInfo);
 }
 
 // Reduce noise in image using a noise peak elimination filter
@@ -897,6 +947,21 @@ Magick::shadeImage::shadeImage( const double azimuth_,
 void Magick::shadeImage::operator()( Magick::Image &image_ ) const
 {
   image_.shade( _azimuth, _elevation, _colorShading );
+}
+
+// Simulate an image shadow
+Magick::shadowImage::shadowImage( const double percent_opacity_,
+                                const double sigma_,
+        const ssize_t x_, const ssize_t y_ )
+  : _percent_opacity( percent_opacity_ ),
+    _sigma( sigma_ ),
+    _x ( x_ ),
+    _y ( y_ )
+{
+} 
+void Magick::shadowImage::operator()( Magick::Image &image_ ) const
+{
+  image_.shadow( _percent_opacity, _sigma, _x, _y );
 }
 
 // Sharpen pixels in image
@@ -1014,26 +1079,6 @@ void Magick::thresholdImage::operator()( Magick::Image &image_ ) const
   image_.threshold( _threshold );
 }
 
-// Transform image based on image and crop geometries
-Magick::transformImage::transformImage( const Magick::Geometry &imageGeometry_ )
-  : _imageGeometry( imageGeometry_ ),
-    _cropGeometry( )
-{
-}
-Magick::transformImage::transformImage( const Magick::Geometry &imageGeometry_,
-                                        const Geometry &cropGeometry_  )
-  : _imageGeometry( imageGeometry_ ),
-    _cropGeometry( cropGeometry_ )
-{
-}
-void Magick::transformImage::operator()( Magick::Image &image_ ) const
-{
-  if ( _cropGeometry.isValid() )
-    image_.transform( _imageGeometry, _cropGeometry );
-  else
-    image_.transform( _imageGeometry );
-}
-
 // Set image color to transparent
 Magick::transparentImage::transparentImage( const Magick::Color& color_ )
   : _color( color_ )
@@ -1088,16 +1133,6 @@ void Magick::zoomImage::operator()( Magick::Image &image_ ) const
 //
 // Function object image attribute accessors
 //
-
-// Anti-alias Postscript and TrueType fonts (default true)
-Magick::antiAliasImage::antiAliasImage( const bool flag_ )
-  : _flag( flag_ )
-{
-}
-void Magick::antiAliasImage::operator()( Magick::Image &image_ ) const
-{
-  image_.antiAlias( _flag );
-}
 
 // Join images into a single multi-image file
 Magick::adjoinImage::adjoinImage( const bool flag_ )
@@ -1170,52 +1205,56 @@ void Magick::boxColorImage::operator()( Magick::Image &image_ ) const
   image_.boxColor( _boxColor );
 }
 
-// Chromaticity blue primary point (e.g. x=0.15, y=0.06)
-Magick::chromaBluePrimaryImage::chromaBluePrimaryImage( const double x_,
-                                                        const double y_ )
-  : _x( x_ ),
-    _y( y_ )
+Magick::chromaBluePrimaryImage::chromaBluePrimaryImage(const double x_,
+  const double y_,const double z_)
+  : _x(x_),
+    _y(y_),
+    _z(z_)
 {
-}
-void Magick::chromaBluePrimaryImage::operator()( Magick::Image &image_ ) const
-{
-  image_.chromaBluePrimary( _x, _y );
 }
 
-// Chromaticity green primary point (e.g. x=0.3, y=0.6)
-Magick::chromaGreenPrimaryImage::chromaGreenPrimaryImage( const double x_,
-                                                          const double y_ )
-  : _x( x_ ),
-    _y( y_ )
+void Magick::chromaBluePrimaryImage::operator()(Magick::Image &image_) const
+{
+  image_.chromaBluePrimary(_x,_y,_z);
+}
+
+Magick::chromaGreenPrimaryImage::chromaGreenPrimaryImage(const double x_,
+  const double y_,const double z_)
+  : _x(x_),
+    _y(y_),
+    _z(z_)
 {
 }
+
 void Magick::chromaGreenPrimaryImage::operator()( Magick::Image &image_ ) const
 {
-  image_.chromaGreenPrimary( _x, _y );
+  image_.chromaGreenPrimary(_x,_y,_z);
 }
 
-// Chromaticity red primary point (e.g. x=0.64, y=0.33)
-Magick::chromaRedPrimaryImage::chromaRedPrimaryImage( const double x_,
-                                                      const double y_ )
-  : _x( x_ ),
-    _y( y_ )
+Magick::chromaRedPrimaryImage::chromaRedPrimaryImage(const double x_,
+  const double y_,const double z_)
+  : _x(x_),
+    _y(y_),
+    _z(z_)
 {
-}
-void Magick::chromaRedPrimaryImage::operator()( Magick::Image &image_ ) const
-{
-  image_.chromaRedPrimary( _x, _y );
 }
 
-// Chromaticity white point (e.g. x=0.3127, y=0.329)
-Magick::chromaWhitePointImage::chromaWhitePointImage( const double x_,
-                                                      const double y_ )
-  : _x( x_ ),
-    _y( y_ )
+void Magick::chromaRedPrimaryImage::operator()(Magick::Image &image_) const
+{
+  image_.chromaRedPrimary(_x,_y,_z);
+}
+
+Magick::chromaWhitePointImage::chromaWhitePointImage(const double x_,
+  const double y_,const double z_)
+  : _x(x_),
+    _y(y_),
+    _z(z_)
 {
 }
-void Magick::chromaWhitePointImage::operator()( Magick::Image &image_ ) const
+
+void Magick::chromaWhitePointImage::operator()(Magick::Image &image_) const
 {
-  image_.chromaWhitePoint( _x, _y );
+  image_.chromaWhitePoint(_x,_y,_z);
 }
 
 // Colors within this distance are considered equal
@@ -1262,13 +1301,13 @@ void Magick::compressTypeImage::operator()( Magick::Image &image_ ) const
 }
 
 // Vertical and horizontal resolution in pixels of the image
-Magick::densityImage::densityImage( const Geometry &geomery_ )
-  : _geomery( geomery_ )
+Magick::densityImage::densityImage( const Point &point_ )
+  : _point( point_ )
 {
 }
 void Magick::densityImage::operator()( Magick::Image &image_ ) const
 {
-  image_.density( _geomery );
+  image_.density( _point );
 }
 
 // Image depth (bits allocated to red/green/blue components)
@@ -1303,7 +1342,7 @@ void Magick::fileNameImage::operator()( Magick::Image &image_ ) const
 }
 
 // Filter to use when resizing image
-Magick::filterTypeImage::filterTypeImage( const FilterTypes filterType_ )
+Magick::filterTypeImage::filterTypeImage( const FilterType filterType_ )
   : _filterType( filterType_ )
 {
 }
@@ -1333,7 +1372,7 @@ void Magick::fontPointsizeImage::operator()( Magick::Image &image_ ) const
 }
 
 // GIF disposal method
-Magick::gifDisposeMethodImage::gifDisposeMethodImage( const size_t disposeMethod_ )
+Magick::gifDisposeMethodImage::gifDisposeMethodImage( const DisposeType disposeMethod_ )
   : _disposeMethod( disposeMethod_ )
 {
 }
@@ -1352,16 +1391,6 @@ void Magick::interlaceTypeImage::operator()( Magick::Image &image_ ) const
   image_.interlaceType( _interlace );
 }
 
-// Linewidth for drawing vector objects (default one)
-Magick::lineWidthImage::lineWidthImage( const double lineWidth_ )
-  : _lineWidth( lineWidth_ )
-{
-}
-void Magick::lineWidthImage::operator()( Magick::Image &image_ ) const
-{
-  image_.lineWidth( _lineWidth );
-}
-
 // File type magick identifier (.e.g "GIF")
 Magick::magickImage::magickImage( const std::string &magick_ )
   : _magick( magick_ )
@@ -1373,23 +1402,23 @@ void Magick::magickImage::operator()( Magick::Image &image_ ) const
 }
 
 // Image supports transparent color
-Magick::matteImage::matteImage( const bool matteFlag_ )
-  : _matteFlag( matteFlag_ )
+Magick::alphaFlagImage::alphaFlagImage( const bool alphaFlag_ )
+  : _alphaFlag( alphaFlag_ )
 {
 }
-void Magick::matteImage::operator()( Magick::Image &image_ ) const
+void Magick::alphaFlagImage::operator()( Magick::Image &image_ ) const
 {
-  image_.matte( _matteFlag );
+  image_.alpha( _alphaFlag );
 }
 
 // Transparent color
-Magick::matteColorImage::matteColorImage( const Color &matteColor_ )
-  : _matteColor( matteColor_ )
+Magick::alphaColorImage::alphaColorImage( const Color &alphaColor_ )
+  : _alphaColor( alphaColor_ )
 {
 }
-void Magick::matteColorImage::operator()( Magick::Image &image_ ) const
+void Magick::alphaColorImage::operator()( Magick::Image &image_ ) const
 {
-  image_.matteColor( _matteColor );
+  image_.alphaColor( _alphaColor );
 }
 
 // Indicate that image is black and white
@@ -1400,26 +1429,6 @@ Magick::monochromeImage::monochromeImage( const bool monochromeFlag_ )
 void Magick::monochromeImage::operator()( Magick::Image &image_ ) const
 {
   image_.monochrome( _monochromeFlag );
-}
-
-// Pen color
-Magick::penColorImage::penColorImage( const Color &penColor_ )
-  : _penColor( penColor_ )
-{
-}
-void Magick::penColorImage::operator()( Magick::Image &image_ ) const
-{
-  image_.penColor( _penColor );
-}
-
-// Pen texture image.
-Magick::penTextureImage::penTextureImage( const Image &penTexture_ )
-  : _penTexture( penTexture_ )
-{
-}
-void Magick::penTextureImage::operator()( Magick::Image &image_ ) const
-{
-  image_.penTexture( _penTexture );
 }
 
 // Set pixel color at location x & y.
@@ -1573,14 +1582,14 @@ void Magick::subRangeImage::operator()( Magick::Image &image_ ) const
   image_.subRange( _subRange );
 }
 
-// Tile name
-Magick::tileNameImage::tileNameImage( const std::string &tileName_ )
-  : _tileName( tileName_ )
+// Anti-alias Postscript and TrueType fonts (default true)
+Magick::textAntiAliasImage::textAntiAliasImage( const bool flag_ )
+  : _flag( flag_ )
 {
 }
-void Magick::tileNameImage::operator()( Magick::Image &image_ ) const
+void Magick::textAntiAliasImage::operator()( Magick::Image &image_ ) const
 {
-  image_.tileName( _tileName );
+  image_.textAntiAlias( _flag );
 }
 
 // Image storage type
@@ -1601,15 +1610,6 @@ Magick::verboseImage::verboseImage( const bool verbose_ )
 void Magick::verboseImage::operator()( Magick::Image &image_ ) const
 {
   image_.verbose( _verbose );
-}
-
-// FlashPix viewing parameters
-Magick::viewImage::viewImage( const std::string &view_ )
-  : _view( view_ ) { }
-
-void Magick::viewImage::operator()( Magick::Image &image_ ) const
-{
-  image_.view( _view );
 }
 
 // X11 display to display to, obtain fonts from, or to capture image

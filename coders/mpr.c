@@ -13,11 +13,11 @@
 %                  Read/Write the Magick Persistent Registry.                 %
 %                                                                             %
 %                              Software Design                                %
-%                                John Cristy                                  %
+%                                   Cristy                                    %
 %                                 July 1992                                   %
 %                                                                             %
 %                                                                             %
-%  Copyright 1999-2011 ImageMagick Studio LLC, a non-profit organization      %
+%  Copyright 1999-2016 ImageMagick Studio LLC, a non-profit organization      %
 %  dedicated to making software imaging solutions freely available.           %
 %                                                                             %
 %  You may not use this file except in compliance with the License.  You may  %
@@ -39,24 +39,24 @@
 /*
   Include declarations.
 */
-#include "magick/studio.h"
-#include "magick/blob.h"
-#include "magick/blob-private.h"
-#include "magick/exception.h"
-#include "magick/exception-private.h"
-#include "magick/magick.h"
-#include "magick/memory_.h"
-#include "magick/registry.h"
-#include "magick/quantum-private.h"
-#include "magick/static.h"
-#include "magick/string_.h"
-#include "magick/module.h"
+#include "MagickCore/studio.h"
+#include "MagickCore/blob.h"
+#include "MagickCore/blob-private.h"
+#include "MagickCore/exception.h"
+#include "MagickCore/exception-private.h"
+#include "MagickCore/magick.h"
+#include "MagickCore/memory_.h"
+#include "MagickCore/registry.h"
+#include "MagickCore/quantum-private.h"
+#include "MagickCore/static.h"
+#include "MagickCore/string_.h"
+#include "MagickCore/module.h"
 
 /*
   Forward declarations.
 */
 static MagickBooleanType
-  WriteMPRImage(const ImageInfo *,Image *);
+  WriteMPRImage(const ImageInfo *,Image *,ExceptionInfo *);
 
 /*
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -91,16 +91,16 @@ static Image *ReadMPRImage(const ImageInfo *image_info,ExceptionInfo *exception)
     *image;
 
   assert(image_info != (const ImageInfo *) NULL);
-  assert(image_info->signature == MagickSignature);
+  assert(image_info->signature == MagickCoreSignature);
   if (image_info->debug != MagickFalse)
     (void) LogMagickEvent(TraceEvent,GetMagickModule(),"%s",
       image_info->filename);
   assert(exception != (ExceptionInfo *) NULL);
-  assert(exception->signature == MagickSignature);
+  assert(exception->signature == MagickCoreSignature);
   image=(Image *) GetImageRegistry(ImageRegistryType,image_info->filename,
     exception);
   if (image != (Image *) NULL)
-    (void) SyncImageSettings(image_info,image);
+    (void) SyncImageSettings(image_info,image,exception);
   return(image);
 }
 
@@ -132,23 +132,19 @@ ModuleExport size_t RegisterMPRImage(void)
   MagickInfo
     *entry;
 
-  entry=SetMagickInfo("MPR");
+  entry=AcquireMagickInfo("MPR","MPR","Magick Persistent Registry");
   entry->decoder=(DecodeImageHandler *) ReadMPRImage;
   entry->encoder=(EncodeImageHandler *) WriteMPRImage;
-  entry->adjoin=MagickFalse;
+  entry->flags^=CoderAdjoinFlag;
   entry->format_type=ImplicitFormatType;
-  entry->stealth=MagickTrue;
-  entry->description=ConstantString("Magick Persistent Registry");
-  entry->module=ConstantString("MPR");
+  entry->flags|=CoderStealthFlag;
   (void) RegisterMagickInfo(entry);
-  entry=SetMagickInfo("MPRI");
+  entry=AcquireMagickInfo("MPR","MPRI","Magick Persistent Registry");
   entry->decoder=(DecodeImageHandler *) ReadMPRImage;
   entry->encoder=(EncodeImageHandler *) WriteMPRImage;
-  entry->adjoin=MagickFalse;
+  entry->flags^=CoderAdjoinFlag;
   entry->format_type=ImplicitFormatType;
-  entry->stealth=MagickTrue;
-  entry->description=ConstantString("Magick Persistent Registry");
-  entry->module=ConstantString("MPRI");
+  entry->flags|=CoderStealthFlag;
   (void) RegisterMagickInfo(entry);
   return(MagickImageCoderSignature);
 }
@@ -195,7 +191,8 @@ ModuleExport void UnregisterMPRImage(void)
 %
 %  The format of the WriteMPRImage method is:
 %
-%      MagickBooleanType WriteMPRImage(const ImageInfo *image_info,Image *image)
+%      MagickBooleanType WriteMPRImage(const ImageInfo *image_info,
+%        Image *image,ExceptionInfo *exception)
 %
 %  A description of each parameter follows.
 %
@@ -203,19 +200,22 @@ ModuleExport void UnregisterMPRImage(void)
 %
 %    o image:  The image.
 %
+%    o exception: return any errors or warnings in this structure.
+%
 */
-static MagickBooleanType WriteMPRImage(const ImageInfo *image_info,Image *image)
+static MagickBooleanType WriteMPRImage(const ImageInfo *image_info,Image *image,
+  ExceptionInfo *exception)
 {
   MagickBooleanType
     status;
 
   assert(image_info != (const ImageInfo *) NULL);
-  assert(image_info->signature == MagickSignature);
+  assert(image_info->signature == MagickCoreSignature);
   assert(image != (Image *) NULL);
-  assert(image->signature == MagickSignature);
+  assert(image->signature == MagickCoreSignature);
+  magick_unreferenced(image_info);
   if (image->debug != MagickFalse)
     (void) LogMagickEvent(TraceEvent,GetMagickModule(),"%s",image->filename);
-  status=SetImageRegistry(ImageRegistryType,image->filename,image,
-    &image->exception);
+  status=SetImageRegistry(ImageRegistryType,image->filename,image,exception);
   return(status);
 }

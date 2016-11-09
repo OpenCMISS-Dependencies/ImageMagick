@@ -306,25 +306,25 @@ int main( int /*argc*/, char ** argv)
       cout << "  ordered dither 2x2 ..." << endl;
       example = model;
       example.label( "Ordered Dither\n(2x2)" );
-      example.randomThreshold( Geometry(2,2) );
+      example.randomThreshold(2,2);
       images.push_back( example );
 
       cout << "  ordered dither 3x3..." << endl;
       example = model;
       example.label( "Ordered Dither\n(3x3)" );
-      example.randomThreshold( Geometry(3,3) );
+      example.randomThreshold(3,3);
       images.push_back( example );
 
       cout << "  ordered dither 4x4..." << endl;
       example = model;
       example.label( "Ordered Dither\n(4x4)" );
-      example.randomThreshold( Geometry(4,4) );
+      example.randomThreshold(4,4);
       images.push_back( example );
     
       cout << "  ordered dither red 4x4..." << endl;
       example = model;
       example.label( "Ordered Dither\n(Red 4x4)" );
-      example.randomThresholdChannel( Geometry(4,4), RedChannel);
+      example.randomThresholdChannel(RedChannel,4,4);
       images.push_back( example );
 
       cout << "  plasma ..." << endl;
@@ -343,7 +343,7 @@ int main( int /*argc*/, char ** argv)
       cout << "  quantum operator ..." << endl;
       example = model;
       example.label( "Quantum Operator\nRed * 0.4" );
-      example.quantumOperator( RedChannel,MultiplyEvaluateOperator,0.40 );
+      example.evaluate( RedChannel,MultiplyEvaluateOperator,0.40 );
       images.push_back( example );
 
       cout << "  raise ..." << endl;
@@ -442,8 +442,8 @@ int main( int /*argc*/, char ** argv)
       cout << "  threshold random ..." << endl;
       example = model;
       example.label( "Random\nThreshold" );
-      example.randomThreshold( Geometry((size_t) (0.3*QuantumRange),
-        (size_t) (0.85*QuantumRange)) );
+      example.randomThreshold( (0.3*QuantumRange),
+        (0.85*QuantumRange) );
       images.push_back( example );
     
       cout << "  unsharp mask ..." << endl;
@@ -456,7 +456,7 @@ int main( int /*argc*/, char ** argv)
       cout << "  wave ..." << endl;
       example = model;
       example.label( "Wave" );
-      example.matte( true );
+      example.alpha( true );
       example.backgroundColor( "#000000FF" );
       example.wave( 25, 150 );
       images.push_back( example );
@@ -475,13 +475,11 @@ int main( int /*argc*/, char ** argv)
       montageOpts.borderColor( "green" );
       montageOpts.borderWidth( 1 );
       montageOpts.tile( "7x4" );
-      montageOpts.compose( OverCompositeOp );
       montageOpts.backgroundColor( "#ffffff" );
       montageOpts.font( font );
       montageOpts.pointSize( 18 );
       montageOpts.fillColor( "#600" );
       montageOpts.strokeColor( Color() );
-      montageOpts.compose(OverCompositeOp);
       montageOpts.fileName( "Magick++ Demo" );
       montageImages( &montage, images.begin(), images.end(), montageOpts );
     }
@@ -499,7 +497,7 @@ int main( int /*argc*/, char ** argv)
     }
 
     for_each( montage.begin(), montage.end(), depthImage(8) );
-    for_each( montage.begin(), montage.end(), matteImage( false ) );
+    for_each( montage.begin(), montage.end(), alphaImage( false ) );
     for_each( montage.begin(), montage.end(), compressTypeImage( RLECompression) );
 
     cout << "Writing image \"demo_out.miff\" ..." << endl;

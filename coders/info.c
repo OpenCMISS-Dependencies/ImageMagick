@@ -13,11 +13,11 @@
 %                         Write Info About the Image.                         %
 %                                                                             %
 %                              Software Design                                %
-%                                John Cristy                                  %
+%                                   Cristy                                    %
 %                                 July 1992                                   %
 %                                                                             %
 %                                                                             %
-%  Copyright 1999-2011 ImageMagick Studio LLC, a non-profit organization      %
+%  Copyright 1999-2016 ImageMagick Studio LLC, a non-profit organization      %
 %  dedicated to making software imaging solutions freely available.           %
 %                                                                             %
 %  You may not use this file except in compliance with the License.  You may  %
@@ -39,33 +39,34 @@
 /*
   Include declarations.
 */
-#include "magick/studio.h"
-#include "magick/property.h"
-#include "magick/blob.h"
-#include "magick/blob-private.h"
-#include "magick/colorspace.h"
-#include "magick/exception.h"
-#include "magick/exception-private.h"
-#include "magick/identify.h"
-#include "magick/image.h"
-#include "magick/image-private.h"
-#include "magick/list.h"
-#include "magick/magick.h"
-#include "magick/memory_.h"
-#include "magick/monitor.h"
-#include "magick/monitor-private.h"
-#include "magick/option.h"
-#include "magick/quantum-private.h"
-#include "magick/static.h"
-#include "magick/string_.h"
-#include "magick/module.h"
-#include "magick/utility.h"
+#include "MagickCore/studio.h"
+#include "MagickCore/artifact.h"
+#include "MagickCore/blob.h"
+#include "MagickCore/blob-private.h"
+#include "MagickCore/colorspace.h"
+#include "MagickCore/exception.h"
+#include "MagickCore/exception-private.h"
+#include "MagickCore/identify.h"
+#include "MagickCore/image.h"
+#include "MagickCore/image-private.h"
+#include "MagickCore/list.h"
+#include "MagickCore/magick.h"
+#include "MagickCore/memory_.h"
+#include "MagickCore/monitor.h"
+#include "MagickCore/monitor-private.h"
+#include "MagickCore/option.h"
+#include "MagickCore/property.h"
+#include "MagickCore/quantum-private.h"
+#include "MagickCore/static.h"
+#include "MagickCore/string_.h"
+#include "MagickCore/module.h"
+#include "MagickCore/utility.h"
 
 /*
   Forward declarations.
 */
 static MagickBooleanType
-  WriteINFOImage(const ImageInfo *,Image *);
+  WriteINFOImage(const ImageInfo *,Image *,ExceptionInfo *);
 
 /*
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -95,11 +96,9 @@ ModuleExport size_t RegisterINFOImage(void)
   MagickInfo
     *entry;
 
-  entry=SetMagickInfo("INFO");
+  entry=AcquireMagickInfo("INFO","INFO","The image format and characteristics");
   entry->encoder=(EncodeImageHandler *) WriteINFOImage;
-  entry->blob_support=MagickFalse;
-  entry->description=ConstantString("The image format and characteristics");
-  entry->module=ConstantString("INFO");
+  entry->flags^=CoderBlobSupportFlag;
   (void) RegisterMagickInfo(entry);
   return(MagickImageCoderSignature);
 }
@@ -144,7 +143,7 @@ ModuleExport void UnregisterINFOImage(void)
 %  The format of the WriteINFOImage method is:
 %
 %      MagickBooleanType WriteINFOImage(const ImageInfo *image_info,
-%        Image *image)
+%        Image *image,ExceptionInfo *exception)
 %
 %  A description of each parameter follows.
 %
@@ -152,9 +151,11 @@ ModuleExport void UnregisterINFOImage(void)
 %
 %    o image:  The image.
 %
+%    o exception: return any errors or warnings in this structure.
+%
 */
 static MagickBooleanType WriteINFOImage(const ImageInfo *image_info,
-  Image *image)
+  Image *image,ExceptionInfo *exception)
 {
   const char
     *format;
@@ -169,12 +170,12 @@ static MagickBooleanType WriteINFOImage(const ImageInfo *image_info,
     Open output image file.
   */
   assert(image_info != (const ImageInfo *) NULL);
-  assert(image_info->signature == MagickSignature);
+  assert(image_info->signature == MagickCoreSignature);
   assert(image != (Image *) NULL);
-  assert(image->signature == MagickSignature);
+  assert(image->signature == MagickCoreSignature);
   if (image->debug != MagickFalse)
     (void) LogMagickEvent(TraceEvent,GetMagickModule(),"%s",image->filename);
-  status=OpenBlob(image_info,image,WriteBlobMode,&image->exception);
+  status=OpenBlob(image_info,image,WriteBlobMode,exception);
   if (status == MagickFalse)
     return(status);
   scene=0;
@@ -184,22 +185,22 @@ static MagickBooleanType WriteINFOImage(const ImageInfo *image_info,
     if (format == (char *) NULL)
       {
         (void) CopyMagickString(image->filename,image->magick_filename,
-          MaxTextExtent);
+          MagickPathExtent);
         image->magick_columns=image->columns;
         image->magick_rows=image->rows;
         (void) IdentifyImage(image,GetBlobFileHandle(image),
-          image_info->verbose);
+          image_info->verbose,exception);
       }
     else
       {
         char
           *text;
 
-        text=InterpretImageProperties(image_info,image,format);
+        text=InterpretImageProperties((ImageInfo *) image_info,image,format,
+          exception);
         if (text != (char *) NULL)
           {
             (void) WriteBlobString(image,text);
-            (void) WriteBlobString(image,"\n");
             text=DestroyString(text);
           }
       }

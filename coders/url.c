@@ -13,12 +13,12 @@
 %                        Retrieve An Image Via URL.                           %
 %                                                                             %
 %                              Software Design                                %
-%                                John Cristy                                  %
+%                                   Cristy                                    %
 %                              Bill Radcliffe                                 %
 %                                March 2000                                   %
 %                                                                             %
 %                                                                             %
-%  Copyright 1999-2011 ImageMagick Studio LLC, a non-profit organization      %
+%  Copyright 1999-2016 ImageMagick Studio LLC, a non-profit organization      %
 %  dedicated to making software imaging solutions freely available.           %
 %                                                                             %
 %  You may not use this file except in compliance with the License.  You may  %
@@ -40,28 +40,26 @@
 /*
   Include declarations.
 */
-#include "magick/studio.h"
-#include "magick/blob.h"
-#include "magick/blob-private.h"
-#include "magick/constitute.h"
-#include "magick/exception.h"
-#include "magick/exception-private.h"
-#include "magick/image.h"
-#include "magick/image-private.h"
-#include "magick/list.h"
-#include "magick/magick.h"
-#include "magick/memory_.h"
-#include "magick/module.h"
-#include "magick/quantum-private.h"
-#include "magick/static.h"
-#include "magick/resource_.h"
-#include "magick/string_.h"
-#include "magick/utility.h"
+#include "MagickCore/studio.h"
+#include "MagickCore/blob.h"
+#include "MagickCore/blob-private.h"
+#include "MagickCore/constitute.h"
+#include "MagickCore/exception.h"
+#include "MagickCore/exception-private.h"
+#include "MagickCore/image.h"
+#include "MagickCore/image-private.h"
+#include "MagickCore/list.h"
+#include "MagickCore/magick.h"
+#include "MagickCore/memory_.h"
+#include "MagickCore/module.h"
+#include "MagickCore/quantum-private.h"
+#include "MagickCore/static.h"
+#include "MagickCore/resource_.h"
+#include "MagickCore/string_.h"
+#include "MagickCore/utility.h"
 #if defined(MAGICKCORE_XML_DELEGATE)
 #  if defined(MAGICKCORE_WINDOWS_SUPPORT)
-#    if defined(__MINGW32__)
-#      define _MSC_VER
-#    else
+#    if !defined(__MINGW32__) && !defined(__MINGW64__)
 #      include <win32config.h>
 #    endif
 #  endif
@@ -69,6 +67,11 @@
 #  include <libxml/xmlmemory.h>
 #  include <libxml/nanoftp.h>
 #  include <libxml/nanohttp.h>
+#endif
+#if defined(MAGICKCORE_WINDOWS_SUPPORT) && \
+    !(defined(__MINGW32__) || defined(__MINGW64__))
+#  include <urlmon.h>
+#  pragma comment(lib, "urlmon.lib")
 #endif
 
 /*
@@ -130,7 +133,7 @@ static Image *ReadURLImage(const ImageInfo *image_info,ExceptionInfo *exception)
 #define MaxBufferExtent  8192
 
   char
-    filename[MaxTextExtent];
+    filename[MagickPathExtent];
 
   FILE
     *file;
@@ -144,34 +147,45 @@ static Image *ReadURLImage(const ImageInfo *image_info,ExceptionInfo *exception)
   int
     unique_file;
 
-  image=(Image *) NULL;
   read_info=CloneImageInfo(image_info);
   SetImageInfoBlob(read_info,(void *) NULL,0);
+  if (LocaleCompare(read_info->magick,"file") == 0)
+    {
+      (void) CopyMagickString(read_info->filename,image_info->filename+2,
+        MagickPathExtent);
+      *read_info->magick='\0';
+      image=ReadImage(read_info,exception);
+      read_info=DestroyImageInfo(read_info);
+      return(GetFirstImageInList(image));
+    }
   file=(FILE *) NULL;
   unique_file=AcquireUniqueFileResource(read_info->filename);
   if (unique_file != -1)
     file=fdopen(unique_file,"wb");
   if ((unique_file == -1) || (file == (FILE *) NULL))
     {
-      read_info=DestroyImageInfo(read_info);
-      (void) CopyMagickString(image->filename,read_info->filename,
-        MaxTextExtent);
       ThrowFileException(exception,FileOpenError,"UnableToCreateTemporaryFile",
-        image->filename);
-      image=DestroyImageList(image);
+        read_info->filename);
+      read_info=DestroyImageInfo(read_info);
       return((Image *) NULL);
     }
-  (void) CopyMagickString(filename,image_info->magick,MaxTextExtent);
-  (void) ConcatenateMagickString(filename,":",MaxTextExtent);
+  (void) CopyMagickString(filename,image_info->magick,MagickPathExtent);
+  (void) ConcatenateMagickString(filename,":",MagickPathExtent);
   LocaleLower(filename);
-  (void) ConcatenateMagickString(filename,image_info->filename,MaxTextExtent);
-  if (LocaleCompare(read_info->magick,"file") == 0)
+  (void) ConcatenateMagickString(filename,image_info->filename,
+    MagickPathExtent);
+#if defined(MAGICKCORE_WINDOWS_SUPPORT) && \
+    !(defined(__MINGW32__) || defined(__MINGW64__))
+  (void) fclose(file);
+  if (URLDownloadToFile(NULL,filename,read_info->filename,0,NULL) != S_OK)
     {
+      ThrowFileException(exception,FileOpenError,"UnableToOpenFile",
+        filename);
       (void) RelinquishUniqueFileResource(read_info->filename);
-      unique_file=(-1);
-      (void) CopyMagickString(read_info->filename,image_info->filename+2,
-        MaxTextExtent);
+      read_info=DestroyImageInfo(read_info);
+      return((Image *) NULL);
     }
+#else
 #if defined(MAGICKCORE_XML_DELEGATE) && defined(LIBXML_FTP_ENABLED)
   if (LocaleCompare(read_info->magick,"ftp") == 0)
     {
@@ -220,16 +234,19 @@ static Image *ReadURLImage(const ImageInfo *image_info,ExceptionInfo *exception)
     }
 #endif
   (void) fclose(file);
+#endif
   *read_info->magick='\0';
   image=ReadImage(read_info,exception);
-  if (unique_file != -1)
-    (void) RelinquishUniqueFileResource(read_info->filename);
+  (void) RelinquishUniqueFileResource(read_info->filename);
   read_info=DestroyImageInfo(read_info);
   if (image != (Image *) NULL)
     GetPathComponent(image_info->filename,TailPath,image->filename);
   else
-    (void) ThrowMagickException(exception,GetMagickModule(),CoderError,
-      "NoDataReturned","`%s'",filename);
+    {
+      (void) ThrowMagickException(exception,GetMagickModule(),CoderError,
+        "NoDataReturned","`%s'",filename);
+      return((Image *) NULL);
+    }
   return(GetFirstImageInList(image));
 }
 
@@ -261,27 +278,32 @@ ModuleExport size_t RegisterURLImage(void)
   MagickInfo
     *entry;
 
-  entry=SetMagickInfo("HTTP");
-#if defined(MAGICKCORE_XML_DELEGATE) && defined(LIBXML_HTTP_ENABLED)
+  entry=AcquireMagickInfo("URL","HTTP","Uniform Resource Locator (http://)");
+#if (defined(MAGICKCORE_WINDOWS_SUPPORT) && \
+    !(defined(__MINGW32__) || defined(__MINGW64__))) || \
+    (defined(MAGICKCORE_XML_DELEGATE) && defined(LIBXML_HTTP_ENABLED))
   entry->decoder=(DecodeImageHandler *) ReadURLImage;
 #endif
-  entry->description=ConstantString("Uniform Resource Locator (http://)");
-  entry->module=ConstantString("URL");
-  entry->stealth=MagickTrue;
+  entry->format_type=ImplicitFormatType;
   (void) RegisterMagickInfo(entry);
-  entry=SetMagickInfo("FTP");
-#if defined(MAGICKCORE_XML_DELEGATE) && defined(LIBXML_FTP_ENABLED)
+  entry=AcquireMagickInfo("URL","HTTPS","Uniform Resource Locator (https://)");
+#if defined(MAGICKCORE_WINDOWS_SUPPORT) && \
+    !(defined(__MINGW32__) || defined(__MINGW64__))
   entry->decoder=(DecodeImageHandler *) ReadURLImage;
 #endif
-  entry->description=ConstantString("Uniform Resource Locator (ftp://)");
-  entry->module=ConstantString("URL");
-  entry->stealth=MagickTrue;
+  entry->format_type=ImplicitFormatType;
   (void) RegisterMagickInfo(entry);
-  entry=SetMagickInfo("FILE");
+  entry=AcquireMagickInfo("URL","FTP","Uniform Resource Locator (ftp://)");
+#if (defined(MAGICKCORE_WINDOWS_SUPPORT) && \
+    !(defined(__MINGW32__) || defined(__MINGW64__))) || \
+    (defined(MAGICKCORE_XML_DELEGATE) && defined(LIBXML_FTP_ENABLED))
   entry->decoder=(DecodeImageHandler *) ReadURLImage;
-  entry->description=ConstantString("Uniform Resource Locator (file://)");
-  entry->module=ConstantString("URL");
-  entry->stealth=MagickTrue;
+#endif
+  entry->format_type=ImplicitFormatType;
+  (void) RegisterMagickInfo(entry);
+  entry=AcquireMagickInfo("URL","FILE","Uniform Resource Locator (file://)");
+  entry->decoder=(DecodeImageHandler *) ReadURLImage;
+  entry->format_type=ImplicitFormatType;
   (void) RegisterMagickInfo(entry);
   return(MagickImageCoderSignature);
 }

@@ -3,7 +3,7 @@
 // Copyright Bob Friesenhahn, 1999, 2000, 2002, 2003
 //
 // PerlMagick "piddle" demo re-implemented using Magick++ methods.
-// The PerlMagick "piddle" demo is written by John Cristy
+// The PerlMagick "piddle" demo is written by Cristy
 //
 
 #include <Magick++.h>
@@ -32,7 +32,7 @@ int main( int /*argc*/, char ** argv)
     Image image( "300x300", "white" );
 
     // Drawing list
-    std::list<Magick::Drawable> drawList;
+    std::vector<Magick::Drawable> drawList;
 
     // Start drawing by pushing a drawing context with specified
     // viewbox size
@@ -69,7 +69,7 @@ int main( int /*argc*/, char ** argv)
       drawList.push_back(DrawableStrokeWidth(4));
       drawList.push_back(DrawableFillColor(Color()));
 
-      std::list<Magick::Coordinate> points;
+      std::vector<Magick::Coordinate> points;
       points.push_back(Coordinate(20,20));
       points.push_back(Coordinate(100,50));
       points.push_back(Coordinate(50,100));
@@ -80,9 +80,14 @@ int main( int /*argc*/, char ** argv)
     //
     // Draw line
     //
-    drawList.push_back(DrawableStrokeColor("red"));
-    drawList.push_back(DrawableStrokeWidth(1));
-    drawList.push_back(DrawableLine(10,200, 20,190));
+    {
+      const double dash_array[] = {4.0, 3.0, 0.0};
+      drawList.push_back(DrawableStrokeDashArray(dash_array));
+      drawList.push_back(DrawableStrokeColor("red"));
+      drawList.push_back(DrawableStrokeWidth(1));
+      drawList.push_back(DrawableLine(10,200, 54,182));
+      drawList.push_back(DrawableStrokeDashArray((double *) 0));
+    }
 
     //
     // Draw arc within a circle.
@@ -96,7 +101,7 @@ int main( int /*argc*/, char ** argv)
     drawList.push_back(DrawableFillColor("blue"));
     drawList.push_back(DrawableStrokeWidth(4));
     {
-      std::list<VPath> path;
+      std::vector<VPath> path;
       path.push_back(PathMovetoAbs(Coordinate(160,70)));
       path.push_back(PathLinetoVerticalRel(-40));
       path.push_back(PathArcRel(PathArcArgs(40,40, 0, 0, 0, -40,40)));
@@ -112,7 +117,7 @@ int main( int /*argc*/, char ** argv)
       drawList.push_back(DrawableFillColor("LimeGreen"));
       drawList.push_back(DrawableStrokeWidth(3));
 
-      std::list<Magick::Coordinate> points;
+      std::vector<Magick::Coordinate> points;
       points.push_back(Coordinate(160,120));
       points.push_back(Coordinate(130,190));
       points.push_back(Coordinate(210,145));

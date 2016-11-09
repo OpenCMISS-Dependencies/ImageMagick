@@ -12,11 +12,11 @@
 %                  Read/Write Cisco IP Phone Image Format                     %
 %                                                                             %
 %                              Software Design                                %
-%                                John Cristy                                  %
+%                                   Cristy                                    %
 %                                April 2004                                   %
 %                                                                             %
 %                                                                             %
-%  Copyright 1999-2011 ImageMagick Studio LLC, a non-profit organization      %
+%  Copyright 1999-2016 ImageMagick Studio LLC, a non-profit organization      %
 %  dedicated to making software imaging solutions freely available.           %
 %                                                                             %
 %  You may not use this file except in compliance with the License.  You may  %
@@ -38,35 +38,37 @@
 /*
   Include declarations.
 */
-#include "magick/studio.h"
-#include "magick/blob.h"
-#include "magick/blob-private.h"
-#include "magick/cache.h"
-#include "magick/color-private.h"
-#include "magick/colorspace.h"
-#include "magick/constitute.h"
-#include "magick/exception.h"
-#include "magick/exception-private.h"
-#include "magick/image.h"
-#include "magick/image-private.h"
-#include "magick/list.h"
-#include "magick/magick.h"
-#include "magick/memory_.h"
-#include "magick/monitor.h"
-#include "magick/monitor-private.h"
-#include "magick/property.h"
-#include "magick/quantize.h"
-#include "magick/quantum-private.h"
-#include "magick/static.h"
-#include "magick/string_.h"
-#include "magick/module.h"
-#include "magick/utility.h"
+#include "MagickCore/studio.h"
+#include "MagickCore/blob.h"
+#include "MagickCore/blob-private.h"
+#include "MagickCore/cache.h"
+#include "MagickCore/color-private.h"
+#include "MagickCore/colorspace.h"
+#include "MagickCore/colorspace-private.h"
+#include "MagickCore/constitute.h"
+#include "MagickCore/exception.h"
+#include "MagickCore/exception-private.h"
+#include "MagickCore/image.h"
+#include "MagickCore/image-private.h"
+#include "MagickCore/list.h"
+#include "MagickCore/magick.h"
+#include "MagickCore/memory_.h"
+#include "MagickCore/monitor.h"
+#include "MagickCore/monitor-private.h"
+#include "MagickCore/pixel-accessor.h"
+#include "MagickCore/property.h"
+#include "MagickCore/quantize.h"
+#include "MagickCore/quantum-private.h"
+#include "MagickCore/static.h"
+#include "MagickCore/string_.h"
+#include "MagickCore/module.h"
+#include "MagickCore/utility.h"
 
 /*
   Forward declarations.
 */
 static MagickBooleanType
-  WriteCIPImage(const ImageInfo *,Image *);
+  WriteCIPImage(const ImageInfo *,Image *,ExceptionInfo *);
 
 /*
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -96,11 +98,9 @@ ModuleExport size_t RegisterCIPImage(void)
   MagickInfo
     *entry;
 
-  entry=SetMagickInfo("CIP");
+  entry=AcquireMagickInfo("CIP","CIP","Cisco IP phone image format");
   entry->encoder=(EncodeImageHandler *) WriteCIPImage;
-  entry->adjoin=MagickFalse;
-  entry->description=ConstantString("Cisco IP phone image format");
-  entry->module=ConstantString("CIP");
+  entry->flags^=CoderAdjoinFlag;
   (void) RegisterMagickInfo(entry);
   return(MagickImageCoderSignature);
 }
@@ -145,7 +145,8 @@ ModuleExport void UnregisterCIPImage(void)
 %
 %  The format of the WriteCIPImage method is:
 %
-%      MagickBooleanType WriteCIPImage(const ImageInfo *image_info,Image *image)
+%      MagickBooleanType WriteCIPImage(const ImageInfo *image_info,
+%        Image *image,ExceptionInfo *exception)
 %
 %  A description of each parameter follows.
 %
@@ -153,19 +154,14 @@ ModuleExport void UnregisterCIPImage(void)
 %
 %    o image:  The image.
 %
+%    o exception: return any errors or warnings in this structure.
+%
 */
-
-static inline ssize_t MagickMin(const ssize_t x,const ssize_t y)
-{
-  if (x < y)
-    return(x);
-  return(y);
-}
-
-static MagickBooleanType WriteCIPImage(const ImageInfo *image_info,Image *image)
+static MagickBooleanType WriteCIPImage(const ImageInfo *image_info,Image *image,
+  ExceptionInfo *exception)
 {
   char
-    buffer[MaxTextExtent];
+    buffer[MagickPathExtent];
 
   const char
     *value;
@@ -173,7 +169,7 @@ static MagickBooleanType WriteCIPImage(const ImageInfo *image_info,Image *image)
   MagickBooleanType
     status;
 
-  register const PixelPacket
+  register const Quantum
     *p;
 
   register ssize_t
@@ -190,58 +186,59 @@ static MagickBooleanType WriteCIPImage(const ImageInfo *image_info,Image *image)
     Open output image file.
   */
   assert(image_info != (const ImageInfo *) NULL);
-  assert(image_info->signature == MagickSignature);
+  assert(image_info->signature == MagickCoreSignature);
   assert(image != (Image *) NULL);
-  assert(image->signature == MagickSignature);
+  assert(image->signature == MagickCoreSignature);
   if (image->debug != MagickFalse)
     (void) LogMagickEvent(TraceEvent,GetMagickModule(),"%s",image->filename);
-  status=OpenBlob(image_info,image,WriteBinaryBlobMode,&image->exception);
+  assert(exception != (ExceptionInfo *) NULL);
+  assert(exception->signature == MagickCoreSignature);
+  status=OpenBlob(image_info,image,WriteBinaryBlobMode,exception);
   if (status == MagickFalse)
     return(status);
   (void) WriteBlobString(image,"<CiscoIPPhoneImage>\n");
-  value=GetImageProperty(image,"label");
+  value=GetImageProperty(image,"label",exception);
   if (value != (const char *) NULL)
-    (void) FormatLocaleString(buffer,MaxTextExtent,"<Title>%s</Title>\n",value);
+    (void) FormatLocaleString(buffer,MagickPathExtent,"<Title>%s</Title>\n",value);
   else
     {
       char
-        basename[MaxTextExtent];
+        basename[MagickPathExtent];
 
       GetPathComponent(image->filename,BasePath,basename);
-      (void) FormatLocaleString(buffer,MaxTextExtent,"<Title>%s</Title>\n",
+      (void) FormatLocaleString(buffer,MagickPathExtent,"<Title>%s</Title>\n",
         basename);
     }
   (void) WriteBlobString(image,buffer);
-  (void) FormatLocaleString(buffer,MaxTextExtent,
+  (void) FormatLocaleString(buffer,MagickPathExtent,
     "<LocationX>%.20g</LocationX>\n",(double) image->page.x);
   (void) WriteBlobString(image,buffer);
-  (void) FormatLocaleString(buffer,MaxTextExtent,
+  (void) FormatLocaleString(buffer,MagickPathExtent,
     "<LocationY>%.20g</LocationY>\n",(double) image->page.y);
   (void) WriteBlobString(image,buffer);
-  (void) FormatLocaleString(buffer,MaxTextExtent,"<Width>%.20g</Width>\n",
+  (void) FormatLocaleString(buffer,MagickPathExtent,"<Width>%.20g</Width>\n",
     (double) (image->columns+(image->columns % 2)));
   (void) WriteBlobString(image,buffer);
-  (void) FormatLocaleString(buffer,MaxTextExtent,"<Height>%.20g</Height>\n",
+  (void) FormatLocaleString(buffer,MagickPathExtent,"<Height>%.20g</Height>\n",
     (double) image->rows);
   (void) WriteBlobString(image,buffer);
-  (void) FormatLocaleString(buffer,MaxTextExtent,"<Depth>2</Depth>\n");
+  (void) FormatLocaleString(buffer,MagickPathExtent,"<Depth>2</Depth>\n");
   (void) WriteBlobString(image,buffer);
   (void) WriteBlobString(image,"<Data>");
-  if (image->colorspace != RGBColorspace)
-    (void) TransformImageColorspace(image,RGBColorspace);
+  (void) TransformImageColorspace(image,sRGBColorspace,exception);
   for (y=0; y < (ssize_t) image->rows; y++)
   {
-    p=GetVirtualPixels(image,0,y,image->columns,1,&image->exception);
-    if (p == (const PixelPacket *) NULL)
+    p=GetVirtualPixels(image,0,y,image->columns,1,exception);
+    if (p == (const Quantum *) NULL)
       break;
     for (x=0; x < ((ssize_t) image->columns-3); x+=4)
     {
       byte=(unsigned char)
-        ((((size_t) (4*PixelIntensityToQuantum(p+3)/QuantumRange) & 0x03) << 6) |
-         (((size_t) (4*PixelIntensityToQuantum(p+2)/QuantumRange) & 0x03) << 4) |
-         (((size_t) (4*PixelIntensityToQuantum(p+1)/QuantumRange) & 0x03) << 2) |
-         (((size_t) (4*PixelIntensityToQuantum(p+0)/QuantumRange) & 0x03) << 0));
-      (void) FormatLocaleString(buffer,MaxTextExtent,"%02x",byte);
+        ((((size_t) (3*ClampToQuantum(GetPixelLuma(image,p+3))/QuantumRange) & 0x03) << 6) |
+         (((size_t) (3*ClampToQuantum(GetPixelLuma(image,p+2))/QuantumRange) & 0x03) << 4) |
+         (((size_t) (3*ClampToQuantum(GetPixelLuma(image,p+1))/QuantumRange) & 0x03) << 2) |
+         (((size_t) (3*ClampToQuantum(GetPixelLuma(image,p+0))/QuantumRange) & 0x03) << 0));
+      (void) FormatLocaleString(buffer,MagickPathExtent,"%02x",byte);
       (void) WriteBlobString(image,buffer);
       p+=4;
     }
@@ -249,11 +246,11 @@ static MagickBooleanType WriteCIPImage(const ImageInfo *image_info,Image *image)
       {
         i=(ssize_t) image->columns % 4;
         byte=(unsigned char)
-          ((((size_t) (4*PixelIntensityToQuantum(p+MagickMin(i,3))/QuantumRange) & 0x03) << 6) |
-           (((size_t) (4*PixelIntensityToQuantum(p+MagickMin(i,2))/QuantumRange) & 0x03) << 4) |
-           (((size_t) (4*PixelIntensityToQuantum(p+MagickMin(i,1))/QuantumRange) & 0x03) << 2) |
-           (((size_t) (4*PixelIntensityToQuantum(p+MagickMin(i,0))/QuantumRange) & 0x03) << 0));
-        (void) FormatLocaleString(buffer,MaxTextExtent,"%02x",~byte);
+          ((((size_t) (3*ClampToQuantum(GetPixelLuma(image,p+MagickMin(i,3)))/QuantumRange) & 0x03) << 6) |
+           (((size_t) (3*ClampToQuantum(GetPixelLuma(image,p+MagickMin(i,2)))/QuantumRange) & 0x03) << 4) |
+           (((size_t) (3*ClampToQuantum(GetPixelLuma(image,p+MagickMin(i,1)))/QuantumRange) & 0x03) << 2) |
+           (((size_t) (3*ClampToQuantum(GetPixelLuma(image,p+MagickMin(i,0)))/QuantumRange) & 0x03) << 0));
+        (void) FormatLocaleString(buffer,MagickPathExtent,"%02x",~byte);
         (void) WriteBlobString(image,buffer);
       }
     status=SetImageProgress(image,SaveImageTag,(MagickOffsetType) y,

@@ -13,11 +13,11 @@
 %                     Read/Write Brother PES Image Format                     %
 %                                                                             %
 %                              Software Design                                %
-%                                John Cristy                                  %
+%                                   Cristy                                    %
 %                                 July 2009                                   %
 %                                                                             %
 %                                                                             %
-%  Copyright 1999-2011 ImageMagick Studio LLC, a non-profit organization      %
+%  Copyright 1999-2016 ImageMagick Studio LLC, a non-profit organization      %
 %  dedicated to making software imaging solutions freely available.           %
 %                                                                             %
 %  You may not use this file except in compliance with the License.  You may  %
@@ -42,36 +42,36 @@
 /*
   Include declarations.
 */
-#include "magick/studio.h"
-#include "magick/property.h"
-#include "magick/blob.h"
-#include "magick/blob-private.h"
-#include "magick/cache.h"
-#include "magick/client.h"
-#include "magick/colorspace.h"
-#include "magick/constitute.h"
-#include "magick/decorate.h"
-#include "magick/exception.h"
-#include "magick/exception-private.h"
-#include "magick/gem.h"
-#include "magick/geometry.h"
-#include "magick/image.h"
-#include "magick/image-private.h"
-#include "magick/list.h"
-#include "magick/magick.h"
-#include "magick/memory_.h"
-#include "magick/monitor.h"
-#include "magick/monitor-private.h"
-#include "magick/montage.h"
-#include "magick/resize.h"
-#include "magick/shear.h"
-#include "magick/quantum-private.h"
-#include "magick/static.h"
-#include "magick/string_.h"
-#include "magick/module.h"
-#include "magick/resource_.h"
-#include "magick/transform.h"
-#include "magick/utility.h"
+#include "MagickCore/studio.h"
+#include "MagickCore/property.h"
+#include "MagickCore/blob.h"
+#include "MagickCore/blob-private.h"
+#include "MagickCore/cache.h"
+#include "MagickCore/client.h"
+#include "MagickCore/colorspace.h"
+#include "MagickCore/constitute.h"
+#include "MagickCore/decorate.h"
+#include "MagickCore/exception.h"
+#include "MagickCore/exception-private.h"
+#include "MagickCore/gem.h"
+#include "MagickCore/geometry.h"
+#include "MagickCore/image.h"
+#include "MagickCore/image-private.h"
+#include "MagickCore/list.h"
+#include "MagickCore/magick.h"
+#include "MagickCore/memory_.h"
+#include "MagickCore/monitor.h"
+#include "MagickCore/monitor-private.h"
+#include "MagickCore/montage.h"
+#include "MagickCore/resize.h"
+#include "MagickCore/shear.h"
+#include "MagickCore/quantum-private.h"
+#include "MagickCore/static.h"
+#include "MagickCore/string_.h"
+#include "MagickCore/module.h"
+#include "MagickCore/resource_.h"
+#include "MagickCore/transform.h"
+#include "MagickCore/utility.h"
 
 /*
   Typedef declarations.
@@ -421,7 +421,7 @@ static MagickBooleanType IsPES(const unsigned char *magick,const size_t length)
 static Image *ReadPESImage(const ImageInfo *image_info,ExceptionInfo *exception)
 {
   char
-    filename[MaxTextExtent];
+    filename[MagickPathExtent];
 
   FILE
     *file;
@@ -472,13 +472,13 @@ static Image *ReadPESImage(const ImageInfo *image_info,ExceptionInfo *exception)
     Open image file.
   */
   assert(image_info != (const ImageInfo *) NULL);
-  assert(image_info->signature == MagickSignature);
+  assert(image_info->signature == MagickCoreSignature);
   if (image_info->debug != MagickFalse)
     (void) LogMagickEvent(TraceEvent,GetMagickModule(),"%s",
       image_info->filename);
   assert(exception != (ExceptionInfo *) NULL);
-  assert(exception->signature == MagickSignature);
-  image=AcquireImage(image_info);
+  assert(exception->signature == MagickCoreSignature);
+  image=AcquireImage(image_info,exception);
   status=OpenBlob(image_info,image,ReadBinaryBlobMode,exception);
   if (status == MagickFalse)
     {
@@ -492,7 +492,7 @@ static Image *ReadPESImage(const ImageInfo *image_info,ExceptionInfo *exception)
   if ((count != 4) || (LocaleNCompare((char *) magick,"#PES",4) != 0))
     ThrowReaderException(CorruptImageError,"ImproperImageHeader");
   count=ReadBlob(image,4,version);
-  offset=(int) ReadBlobLSBLong(image);
+  offset=ReadBlobLSBSignedLong(image);
   if (DiscardBlobBytes(image,offset+36) == MagickFalse)
     ThrowFileException(exception,CorruptImageError,"UnexpectedEndOfFile",
       image->filename);
@@ -504,12 +504,15 @@ static Image *ReadPESImage(const ImageInfo *image_info,ExceptionInfo *exception)
   number_colors=(size_t) ReadBlobByte(image)+1;
   for (i=0; i < (ssize_t) number_colors; i++)
   {
-    j=(int) ReadBlobByte(image);
-    blocks[i].color=PESColor+j;
+    j=ReadBlobByte(image);
+    blocks[i].color=PESColor+(j < 0 ? 0 : j);
     blocks[i].offset=0;
   }
   for ( ; i < 256L; i++)
+  {
     blocks[i].offset=0;
+    blocks[i].color=PESColor;
+  }
   if (DiscardBlobBytes(image,532L-number_colors-21) == MagickFalse)
     ThrowFileException(exception,CorruptImageError,"UnexpectedEndOfFile",
       image->filename);
@@ -533,8 +536,8 @@ static Image *ReadPESImage(const ImageInfo *image_info,ExceptionInfo *exception)
   delta_y=0;
   while (EOFBlob(image) != EOF)
   {
-    x=(int) ReadBlobByte(image);
-    y=(int) ReadBlobByte(image);
+    x=ReadBlobByte(image);
+    y=ReadBlobByte(image);
     if ((x == 0xff) && (y == 0))
       break;
     if ((x == 254) && (y == 176))
@@ -555,7 +558,7 @@ static Image *ReadPESImage(const ImageInfo *image_info,ExceptionInfo *exception)
           Normal stitch.
         */
         if ((x & 0x40) != 0)
-         x-=0x80;
+          x-=0x80;
       }
     else
       {
@@ -653,16 +656,16 @@ static Image *ReadPESImage(const ImageInfo *image_info,ExceptionInfo *exception)
   */
   read_info=CloneImageInfo(image_info);
   SetImageInfoBlob(read_info,(void *) NULL,0);
-  (void) FormatLocaleString(read_info->filename,MaxTextExtent,"svg:%s",
+  (void) FormatLocaleString(read_info->filename,MagickPathExtent,"svg:%s",
     filename);
   image=ReadImage(read_info,exception);
   if (image != (Image *) NULL)
     {
       (void) CopyMagickString(image->filename,image_info->filename,
-        MaxTextExtent);
+        MagickPathExtent);
       (void) CopyMagickString(image->magick_filename,image_info->filename,
-        MaxTextExtent);
-      (void) CopyMagickString(image->magick,"PES",MaxTextExtent);
+        MagickPathExtent);
+      (void) CopyMagickString(image->magick,"PES",MagickPathExtent);
     }
   read_info=DestroyImageInfo(read_info);
   (void) RelinquishUniqueFileResource(filename);
@@ -697,11 +700,9 @@ ModuleExport size_t RegisterPESImage(void)
   MagickInfo
     *entry;
 
-  entry=SetMagickInfo("PES");
+  entry=AcquireMagickInfo("PES","PES","Embrid Embroidery Format");
   entry->decoder=(DecodeImageHandler *) ReadPESImage;
   entry->magick=(IsImageFormatHandler *) IsPES;
-  entry->description=ConstantString("Embrid Embroidery Format");
-  entry->module=ConstantString("PES");
   (void) RegisterMagickInfo(entry);
   return(MagickImageCoderSignature);
 }

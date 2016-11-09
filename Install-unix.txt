@@ -23,7 +23,7 @@ Configure
   default options, and build from within the source directory, you can simply
   type:
   
-    $magick> cd ImageMagick-6.5.9
+    $magick> cd ImageMagick-7.0.3
      $magick> ./configure
   
   Watch the configure script output to verify that it finds everything that
@@ -251,6 +251,9 @@ Configure
       compilation options for large files in order to use the library.
   
   Here are the optional packages you can configure:
+
+    --enable-legacy-support
+      install legacy command-line utilities (default disabled).
   
     --with-quantum-depth
       number of bits in a pixel quantum (default 16).
@@ -342,6 +345,10 @@ Configure
       optimization and debug flags (default -g -O2). Antique C++ compilers
       will normally be rejected by configure tests so specifying this option
       should only be necessary if Magick++ fails to compile.
+
+    --with-package-release-name
+      encode this name into the shared library name (see libtools -release
+      option).
   
     --without-perl
       disable build/install of PerlMagick, or
@@ -515,7 +522,7 @@ Build
       imperfect for PerlMagick since Perl no longer supports an uninstall
       target.
   
-  In most cases you will simply wand to compile ImageMagick with this command:
+  In most cases you will simply want to compile ImageMagick with this command:
   
     $magick> make
   
@@ -576,7 +583,7 @@ Linux-specific Build instructions
   After the build you, locate the RPMS folder and install the ImageMagick
   binary RPM distribution:
   
-    $magick> rpm -ivh ImageMagick-6.5.9-?.*.rpm
+    $magick> rpm -ivh ImageMagick-7.0.0-?.*.rpm
   
 MinGW-specific Build instructions
   
@@ -586,8 +593,8 @@ MinGW-specific Build instructions
   sure you specify the development headers when you install a package. Next
   type,
   
-    $magick> tar jxvf ImageMagick-6.5.9-?.tar.bz2
-    $magick> cd ImageMagick-6.5.9
+    $magick> tar jxvf ImageMagick-7.0.0-?.tar.bz2
+    $magick> cd ImageMagick-7.0.0
     $magick> export CPPFLAGS="-Ic:/Progra~1/GnuWin32/include"
     $magick> export LDFLAGS="-Lc:/Progra~1/GnuWin32/lib"
     $magick> ./configure --without-perl

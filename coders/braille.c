@@ -15,7 +15,7 @@
 %                                February 2008                                %
 %                                                                             %
 %                                                                             %
-%  Copyright 1999-2011 ImageMagick Studio LLC, a non-profit organization      %
+%  Copyright 1999-2016 ImageMagick Studio LLC, a non-profit organization      %
 %  dedicated to making software imaging solutions freely available.           %
 %                                                                             %
 %  You may not use this file except in compliance with the License.  You may  %
@@ -37,34 +37,36 @@
 /*
   Include declarations.
 */
-#include "magick/studio.h"
-#include "magick/blob.h"
-#include "magick/blob-private.h"
-#include "magick/cache.h"
-#include "magick/color-private.h"
-#include "magick/colorspace.h"
-#include "magick/constitute.h"
-#include "magick/exception.h"
-#include "magick/exception-private.h"
-#include "magick/image.h"
-#include "magick/image-private.h"
-#include "magick/list.h"
-#include "magick/magick.h"
-#include "magick/memory_.h"
-#include "magick/module.h"
-#include "magick/monitor.h"
-#include "magick/monitor-private.h"
-#include "magick/property.h"
-#include "magick/quantize.h"
-#include "magick/static.h"
-#include "magick/string_.h"
-#include "magick/utility.h"
+#include "MagickCore/studio.h"
+#include "MagickCore/attribute.h"
+#include "MagickCore/blob.h"
+#include "MagickCore/blob-private.h"
+#include "MagickCore/cache.h"
+#include "MagickCore/color-private.h"
+#include "MagickCore/colorspace.h"
+#include "MagickCore/constitute.h"
+#include "MagickCore/exception.h"
+#include "MagickCore/exception-private.h"
+#include "MagickCore/image.h"
+#include "MagickCore/image-private.h"
+#include "MagickCore/list.h"
+#include "MagickCore/magick.h"
+#include "MagickCore/memory_.h"
+#include "MagickCore/module.h"
+#include "MagickCore/monitor.h"
+#include "MagickCore/monitor-private.h"
+#include "MagickCore/pixel-accessor.h"
+#include "MagickCore/property.h"
+#include "MagickCore/quantize.h"
+#include "MagickCore/static.h"
+#include "MagickCore/string_.h"
+#include "MagickCore/utility.h"
 
 /*
   Forward declarations.
 */
 static MagickBooleanType
-  WriteBRAILLEImage(const ImageInfo *,Image *);
+  WriteBRAILLEImage(const ImageInfo *,Image *,ExceptionInfo *);
 
 /*
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -94,23 +96,25 @@ ModuleExport size_t RegisterBRAILLEImage(void)
   MagickInfo
     *entry;
 
-  entry=SetMagickInfo("BRF");
+  entry=AcquireMagickInfo("BRAILLE","BRF","BRF ASCII Braille format");
   entry->encoder=(EncodeImageHandler *) WriteBRAILLEImage;
-  entry->adjoin=MagickFalse;
-  entry->description=AcquireString("BRF ASCII Braille format");
-  entry->module=AcquireString("BRAILLE");
+  entry->flags^=CoderAdjoinFlag;
   (void) RegisterMagickInfo(entry);
-  entry=SetMagickInfo("UBRL");
+  entry=AcquireMagickInfo("BRAILLE","UBRL","Unicode Text format");
   entry->encoder=(EncodeImageHandler *) WriteBRAILLEImage;
-  entry->adjoin=MagickFalse;
-  entry->description=AcquireString("Unicode Text format");
-  entry->module=AcquireString("BRAILLE");
+  entry->flags^=CoderAdjoinFlag;
   (void) RegisterMagickInfo(entry);
-  entry=SetMagickInfo("ISOBRL");
+  entry=AcquireMagickInfo("BRAILLE","UBRL6","Unicode Text format 6dot");
   entry->encoder=(EncodeImageHandler *) WriteBRAILLEImage;
-  entry->adjoin=MagickFalse;
-  entry->description=AcquireString("ISO/TR 11548-1 format");
-  entry->module=AcquireString("BRAILLE");
+  entry->flags^=CoderAdjoinFlag;
+  (void) RegisterMagickInfo(entry);
+  entry=AcquireMagickInfo("BRAILLE","ISOBRL","ISO/TR 11548-1 format");
+  entry->encoder=(EncodeImageHandler *) WriteBRAILLEImage;
+  entry->flags^=CoderAdjoinFlag;
+  (void) RegisterMagickInfo(entry);
+  entry=AcquireMagickInfo("BRAILLE","ISOBRL6","ISO/TR 11548-1 format 6dot");
+  entry->encoder=(EncodeImageHandler *) WriteBRAILLEImage;
+  entry->flags^=CoderAdjoinFlag;
   (void) RegisterMagickInfo(entry);
   return(MagickImageCoderSignature);
 }
@@ -138,7 +142,9 @@ ModuleExport void UnregisterBRAILLEImage(void)
 {
   (void) UnregisterMagickInfo("BRF");
   (void) UnregisterMagickInfo("UBRL");
+  (void) UnregisterMagickInfo("UBRL6");
   (void) UnregisterMagickInfo("ISOBRL");
+  (void) UnregisterMagickInfo("ISOBRL6");
 }
 
 /*
@@ -157,7 +163,7 @@ ModuleExport void UnregisterBRAILLEImage(void)
 %  The format of the WriteBRAILLEImage method is:
 %
 %      MagickBooleanType WriteBRAILLEImage(const ImageInfo *image_info,
-%        Image *image)
+%        Image *image,ExceptionInfo *exception)
 %
 %  A description of each parameter follows.
 %
@@ -165,18 +171,17 @@ ModuleExport void UnregisterBRAILLEImage(void)
 %
 %    o image:  The image.
 %
+%    o exception: return any errors or warnings in this structure.
+%
 */
 static MagickBooleanType WriteBRAILLEImage(const ImageInfo *image_info,
-  Image *image)
+  Image *image,ExceptionInfo *exception)
 {
   char
-    buffer[MaxTextExtent];
+    buffer[MagickPathExtent];
 
   const char
     *value;
-
-  IndexPacket
-    polarity;
 
   int
     unicode = 0,
@@ -185,10 +190,10 @@ static MagickBooleanType WriteBRAILLEImage(const ImageInfo *image_info,
   MagickBooleanType
     status;
 
-  register const IndexPacket
-    *indexes;
+  Quantum
+    polarity;
 
-  register const PixelPacket
+  register const Quantum
     *p;
 
   register ssize_t
@@ -204,67 +209,77 @@ static MagickBooleanType WriteBRAILLEImage(const ImageInfo *image_info,
     Open output image file.
   */
   assert(image_info != (const ImageInfo *) NULL);
-  assert(image_info->signature == MagickSignature);
+  assert(image_info->signature == MagickCoreSignature);
   assert(image != (Image *) NULL);
-  assert(image->signature == MagickSignature);
+  assert(image->signature == MagickCoreSignature);
   if (LocaleCompare(image_info->magick, "UBRL") == 0)
     unicode=1;
-  else
-    if (LocaleCompare(image_info->magick, "ISOBRL") == 0)
-      iso_11548_1=1;
-    else
+  else if (LocaleCompare(image_info->magick, "UBRL6") == 0)
+    {
+      unicode=1;
       cell_height=3;
+    }
+  else if (LocaleCompare(image_info->magick, "ISOBRL") == 0)
+    iso_11548_1=1;
+  else if (LocaleCompare(image_info->magick, "ISOBRL6") == 0)
+    {
+      iso_11548_1=1;
+      cell_height=3;
+    }
+  else
+    cell_height=3;
   if (image->debug != MagickFalse)
     (void) LogMagickEvent(TraceEvent,GetMagickModule(),"%s",image->filename);
-  status=OpenBlob(image_info,image,WriteBinaryBlobMode,&image->exception);
+  assert(exception != (ExceptionInfo *) NULL);
+  assert(exception->signature == MagickCoreSignature);
+  status=OpenBlob(image_info,image,WriteBinaryBlobMode,exception);
   if (status == MagickFalse)
     return(status);
   if (!iso_11548_1)
     {
-      value=GetImageProperty(image,"label");
+      value=GetImageProperty(image,"label",exception);
       if (value != (const char *) NULL)
         {
-          (void) FormatLocaleString(buffer,MaxTextExtent,"Title: %s\n", value);
+          (void) FormatLocaleString(buffer,MagickPathExtent,"Title: %s\n", value);
           (void) WriteBlobString(image,buffer);
         }
       if (image->page.x != 0)
         {
-          (void) FormatLocaleString(buffer,MaxTextExtent,"X: %.20g\n",(double) 
+          (void) FormatLocaleString(buffer,MagickPathExtent,"X: %.20g\n",(double) 
             image->page.x);
           (void) WriteBlobString(image,buffer);
         }
       if (image->page.y != 0)
         {
-          (void) FormatLocaleString(buffer,MaxTextExtent,"Y: %.20g\n",(double) 
+          (void) FormatLocaleString(buffer,MagickPathExtent,"Y: %.20g\n",(double) 
             image->page.y);
           (void) WriteBlobString(image,buffer);
         }
-      (void) FormatLocaleString(buffer,MaxTextExtent,"Width: %.20g\n",(double)
+      (void) FormatLocaleString(buffer,MagickPathExtent,"Width: %.20g\n",(double)
         (image->columns+(image->columns % 2)));
       (void) WriteBlobString(image,buffer);
-      (void) FormatLocaleString(buffer,MaxTextExtent,"Height: %.20g\n",(double)
+      (void) FormatLocaleString(buffer,MagickPathExtent,"Height: %.20g\n",(double)
         image->rows);
       (void) WriteBlobString(image,buffer);
       (void) WriteBlobString(image,"\n");
     }
-  (void) SetImageType(image,BilevelType);
+  (void) SetImageType(image,BilevelType,exception);
   polarity = 0;
   if (image->storage_class == PseudoClass) {
-    polarity=(IndexPacket) (PixelIntensityToQuantum(&image->colormap[0]) >=
-      (Quantum) (QuantumRange/2));
+    polarity=(Quantum) (GetPixelInfoIntensity(image,&image->colormap[0]) >=
+      (QuantumRange/2.0));
     if (image->colors == 2)
-      polarity=(IndexPacket) (PixelIntensityToQuantum(&image->colormap[0]) >=
-         PixelIntensityToQuantum(&image->colormap[1]));
+      polarity=(Quantum) (GetPixelInfoIntensity(image,&image->colormap[0]) >=
+        GetPixelInfoIntensity(image,&image->colormap[1]));
   }
   for (y=0; y < (ssize_t) image->rows; y+=(ssize_t) cell_height)
   {
     if ((y+cell_height) > image->rows)
       cell_height = (size_t) (image->rows-y);
 
-    p=GetVirtualPixels(image,0,y,image->columns,cell_height,&image->exception);
-    if (p == (const PixelPacket *) NULL)
+    p=GetVirtualPixels(image,0,y,image->columns,cell_height,exception);
+    if (p == (const Quantum *) NULL)
       break;
-    indexes=GetVirtualIndexQueue(image);
     for (x=0; x < (ssize_t) image->columns; x+=2)
     {
       unsigned char cell = 0;
@@ -274,10 +289,12 @@ static MagickBooleanType WriteBRAILLEImage(const ImageInfo *image_info,
       {
 #define do_cell(dx,dy,bit) do { \
         if (image->storage_class == PseudoClass) \
-          cell |= (GetIndexPixelComponent(indexes+x+dx+dy*image->columns) == polarity) << bit; \
+          cell |= (GetPixelIndex(image,p+x+dx+dy*image->columns) == polarity) << bit; \
         else \
-          cell |= (GetGreenPixelComponent(p+x+dx+dy*image->columns) == 0) << bit; \
-} while (0) 
+          cell |= (GetPixelGreen(image,p+x+dx+dy*image->columns) == 0) << bit; \
+DisableMSCWarning(4127) \
+} while (0) \
+RestoreMSCWarning
 
         do_cell(0,0,0);
         if (two_columns)
@@ -300,7 +317,9 @@ static MagickBooleanType WriteBRAILLEImage(const ImageInfo *image_info,
         do_cell(0,3,6);
         if (two_columns)
           do_cell(1,3,7);
+DisableMSCWarning(4127)
       } while(0);
+RestoreMSCWarning
 
       if (unicode)
         {

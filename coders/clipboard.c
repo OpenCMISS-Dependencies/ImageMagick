@@ -17,7 +17,7 @@
 %                                 May 2002                                    %
 %                                                                             %
 %                                                                             %
-%  Copyright 1999-2011 ImageMagick Studio LLC, a non-profit organization      %
+%  Copyright 1999-2016 ImageMagick Studio LLC, a non-profit organization      %
 %  dedicated to making software imaging solutions freely available.           %
 %                                                                             %
 %  You may not use this file except in compliance with the License.  You may  %
@@ -39,37 +39,39 @@
 /*
   Include declarations.
 */
-#include "magick/studio.h"
+#include "MagickCore/studio.h"
 #if defined(MAGICKCORE_WINGDI32_DELEGATE)
 #  if defined(__CYGWIN__)
 #    include <windows.h>
 #  else
      /* All MinGW needs ... */
+#    include "MagickCore/nt-base-private.h"
 #    include <wingdi.h>
 #  endif
 #endif
-#include "magick/blob.h"
-#include "magick/blob-private.h"
-#include "magick/cache.h"
-#include "magick/exception.h"
-#include "magick/exception-private.h"
-#include "magick/image.h"
-#include "magick/image-private.h"
-#include "magick/list.h"
-#include "magick/magick.h"
-#include "magick/memory_.h"
-#include "magick/nt-feature.h"
-#include "magick/quantum-private.h"
-#include "magick/static.h"
-#include "magick/string_.h"
-#include "magick/module.h"
+#include "MagickCore/blob.h"
+#include "MagickCore/blob-private.h"
+#include "MagickCore/cache.h"
+#include "MagickCore/exception.h"
+#include "MagickCore/exception-private.h"
+#include "MagickCore/image.h"
+#include "MagickCore/image-private.h"
+#include "MagickCore/list.h"
+#include "MagickCore/magick.h"
+#include "MagickCore/memory_.h"
+#include "MagickCore/nt-feature.h"
+#include "MagickCore/pixel-accessor.h"
+#include "MagickCore/quantum-private.h"
+#include "MagickCore/static.h"
+#include "MagickCore/string_.h"
+#include "MagickCore/module.h"
 
 /*
   Forward declarations.
 */
 #if defined(MAGICKCORE_WINGDI32_DELEGATE)
 static MagickBooleanType
-  WriteCLIPBOARDImage(const ImageInfo *,Image *);
+  WriteCLIPBOARDImage(const ImageInfo *,Image *,ExceptionInfo *);
 #endif
 
 /*
@@ -106,23 +108,26 @@ static Image *ReadCLIPBOARDImage(const ImageInfo *image_info,
   Image
     *image;
 
+  MagickBooleanType
+    status;
+
   register ssize_t
     x;
 
-  register PixelPacket
+  register Quantum
     *q;
 
   ssize_t
     y;
 
   assert(image_info != (const ImageInfo *) NULL);
-  assert(image_info->signature == MagickSignature);
+  assert(image_info->signature == MagickCoreSignature);
   if (image_info->debug != MagickFalse)
     (void) LogMagickEvent(TraceEvent,GetMagickModule(),"%s",
       image_info->filename);
   assert(exception != (ExceptionInfo *) NULL);
-  assert(exception->signature == MagickSignature);
-  image=AcquireImage(image_info);
+  assert(exception->signature == MagickCoreSignature);
+  image=AcquireImage(image_info,exception);
   {
     HBITMAP
       bitmapH;
@@ -161,9 +166,12 @@ static Image *ReadCLIPBOARDImage(const ImageInfo *image_info,
       GetObject(bitmapH,sizeof(BITMAP),(LPSTR) &bitmap);
       if ((image->columns == 0) || (image->rows == 0))
         {
-          image->rows=bitmap.bmHeight;
           image->columns=bitmap.bmWidth;
+          image->rows=bitmap.bmHeight;
         }
+      status=SetImageExtent(image,image->columns,image->rows,exception);
+      if (status == MagickFalse)
+        return(DestroyImageList(image));
       /*
         Initialize the bitmap header info.
       */
@@ -209,16 +217,16 @@ static Image *ReadCLIPBOARDImage(const ImageInfo *image_info,
       for (y=0; y < (ssize_t) image->rows; y++)
       {
         q=QueueAuthenticPixels(image,0,y,image->columns,1,exception);
-        if (q == (PixelPacket *) NULL)
+        if (q == (Quantum *) NULL)
           break;
         for (x=0; x < (ssize_t) image->columns; x++)
         {
-          SetRedPixelComponent(q,ScaleCharToQuantum(pBits->rgbRed));
-          SetGreenPixelComponent(q,ScaleCharToQuantum(pBits->rgbGreen));
-          SetBluePixelComponent(q,ScaleCharToQuantum(pBits->rgbBlue));
-          SetOpacityPixelComponent(q,OpaqueOpacity);
+          SetPixelRed(image,ScaleCharToQuantum(pBits->rgbRed),q);
+          SetPixelGreen(image,ScaleCharToQuantum(pBits->rgbGreen),q);
+          SetPixelBlue(image,ScaleCharToQuantum(pBits->rgbBlue),q);
+          SetPixelAlpha(image,OpaqueAlpha,q);
           pBits++;
-          q++;
+          q+=GetPixelChannels(image);
         }
         if (SyncAuthenticPixels(image,exception) == MagickFalse)
           break;
@@ -260,15 +268,13 @@ ModuleExport size_t RegisterCLIPBOARDImage(void)
   MagickInfo
     *entry;
 
-  entry=SetMagickInfo("CLIPBOARD");
+  entry=AcquireMagickInfo("CLIPBOARD","CLIPBOARD","The system clipboard");
 #if defined(MAGICKCORE_WINGDI32_DELEGATE)
   entry->decoder=(DecodeImageHandler *) ReadCLIPBOARDImage;
   entry->encoder=(EncodeImageHandler *) WriteCLIPBOARDImage;
 #endif
-  entry->adjoin=MagickFalse;
+  entry->flags^=CoderAdjoinFlag;
   entry->format_type=ImplicitFormatType;
-  entry->description=ConstantString("The system clipboard");
-  entry->module=ConstantString("CLIPBOARD");
   (void) RegisterMagickInfo(entry);
   return(MagickImageCoderSignature);
 }
@@ -313,7 +319,7 @@ ModuleExport void UnregisterCLIPBOARDImage(void)
 %  The format of the WriteCLIPBOARDImage method is:
 %
 %      MagickBooleanType WriteCLIPBOARDImage(const ImageInfo *image_info,
-%        Image *image)
+%        Image *image,ExceptionInfo *exception)
 %
 %  A description of each parameter follows.
 %
@@ -321,18 +327,20 @@ ModuleExport void UnregisterCLIPBOARDImage(void)
 %
 %    o image:  The image.
 %
+%    o exception: return any errors or warnings in this structure.
+%
 */
 #if defined(MAGICKCORE_WINGDI32_DELEGATE)
 static MagickBooleanType WriteCLIPBOARDImage(const ImageInfo *image_info,
-  Image *image)
+  Image *image,ExceptionInfo *exception)
 {
   /*
     Allocate memory for pixels.
   */
   assert(image_info != (const ImageInfo *) NULL);
-  assert(image_info->signature == MagickSignature);
+  assert(image_info->signature == MagickCoreSignature);
   assert(image != (Image *) NULL);
-  assert(image->signature == MagickSignature);
+  assert(image->signature == MagickCoreSignature);
   if (image->debug != MagickFalse)
     (void) LogMagickEvent(TraceEvent,GetMagickModule(),"%s",image->filename);
   {
@@ -341,11 +349,10 @@ static MagickBooleanType WriteCLIPBOARDImage(const ImageInfo *image_info,
 
     OpenClipboard(NULL);
     EmptyClipboard();
-    bitmapH=(HBITMAP) ImageToHBITMAP(image);
+    bitmapH=(HBITMAP) ImageToHBITMAP(image,exception);
     SetClipboardData(CF_BITMAP,bitmapH);
     CloseClipboard();
   }
   return(MagickTrue);
 }
 #endif /* MAGICKCORE_WINGDI32_DELEGATE */
-

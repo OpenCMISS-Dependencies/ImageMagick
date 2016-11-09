@@ -19,7 +19,7 @@
 %                                  2008.05.07                                 %
 %                                     v 0.9                                   %
 %                                                                             %
-%  Copyright 1999-2011 ImageMagick Studio LLC, a non-profit organization      %
+%  Copyright 1999-2016 ImageMagick Studio LLC, a non-profit organization      %
 %  dedicated to making software imaging solutions freely available.           %
 %                                                                             %
 %  You may not use this file except in compliance with the License.  You may  %
@@ -41,26 +41,27 @@
 /*
  Include declarations.
  */
-#include "magick/studio.h"
-#include "magick/blob.h"
-#include "magick/blob-private.h"
-#include "magick/cache.h"
-#include "magick/colorspace.h"
-#include "magick/exception.h"
-#include "magick/exception-private.h"
-#include "magick/image.h"
-#include "magick/image-private.h"
-#include "magick/list.h"
-#include "magick/magick.h"
-#include "magick/memory_.h"
-#include "magick/monitor.h"
-#include "magick/monitor-private.h"
-#include "magick/option.h"
-#include "magick/property.h"
-#include "magick/quantum-private.h"
-#include "magick/static.h"
-#include "magick/string_.h"
-#include "magick/module.h"
+#include "MagickCore/studio.h"
+#include "MagickCore/blob.h"
+#include "MagickCore/blob-private.h"
+#include "MagickCore/cache.h"
+#include "MagickCore/colorspace.h"
+#include "MagickCore/colorspace-private.h"
+#include "MagickCore/exception.h"
+#include "MagickCore/exception-private.h"
+#include "MagickCore/image.h"
+#include "MagickCore/image-private.h"
+#include "MagickCore/list.h"
+#include "MagickCore/magick.h"
+#include "MagickCore/memory_.h"
+#include "MagickCore/monitor.h"
+#include "MagickCore/monitor-private.h"
+#include "MagickCore/option.h"
+#include "MagickCore/property.h"
+#include "MagickCore/quantum-private.h"
+#include "MagickCore/static.h"
+#include "MagickCore/string_.h"
+#include "MagickCore/module.h"
 
 /* 
 Tyedef declarations
@@ -81,9 +82,10 @@ typedef struct _IPLInfo
 } IPLInfo;
 
 static MagickBooleanType
-  WriteIPLImage(const ImageInfo *,Image *);
+  WriteIPLImage(const ImageInfo *,Image *,ExceptionInfo *);
 
-void increase (void *pixel, int byteType){
+/*
+static void increase (void *pixel, int byteType){
   switch(byteType){
     case 0:(*((unsigned char *) pixel))++; break;
     case 1:(*((signed int *) pixel))++; break;
@@ -92,6 +94,7 @@ void increase (void *pixel, int byteType){
     default:(*((unsigned int *) pixel))++; break;
   }  
 }
+*/
 
 /*
  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -160,12 +163,12 @@ static MagickBooleanType IsIPL(const unsigned char *magick,const size_t length)
  %
  */
 
-void SetHeaderFromIPL(Image *image, IPLInfo *ipl){
+static void SetHeaderFromIPL(Image *image, IPLInfo *ipl){
   image->columns = ipl->width;
   image->rows = ipl->height;
   image->depth = ipl->depth;
-  image->x_resolution = 1;
-  image->y_resolution = 1;
+  image->resolution.x = 1;
+  image->resolution.y = 1;
 }
 
 
@@ -178,7 +181,7 @@ static Image *ReadIPLImage(const ImageInfo *image_info,ExceptionInfo *exception)
   Image *image;
 
   MagickBooleanType status;
-  register PixelPacket *q;
+  register Quantum *q;
   unsigned char magick[12], *pixels;
   ssize_t count;
   ssize_t y;
@@ -198,13 +201,13 @@ static Image *ReadIPLImage(const ImageInfo *image_info,ExceptionInfo *exception)
    */
 
   assert(image_info != (const ImageInfo *) NULL);
-  assert(image_info->signature == MagickSignature);
+  assert(image_info->signature == MagickCoreSignature);
   if ( image_info->debug != MagickFalse)
     (void) LogMagickEvent(TraceEvent, GetMagickModule(), "%s",
                 image_info->filename);
   assert(exception != (ExceptionInfo *) NULL);
-  assert(exception->signature == MagickSignature);
-  image=AcquireImage(image_info);
+  assert(exception->signature == MagickCoreSignature);
+  image=AcquireImage(image_info,exception);
   status=OpenBlob(image_info,image,ReadBinaryBlobMode,exception);
   if (status == MagickFalse)
   {
@@ -245,7 +248,7 @@ static Image *ReadIPLImage(const ImageInfo *image_info,ExceptionInfo *exception)
   if((ipl_info.width == 0UL) || (ipl_info.height == 0UL))
     ThrowReaderException(CorruptImageError,"ImproperImageHeader");
   ipl_info.colors=ReadBlobLong(image); 
-  if(ipl_info.colors == 3){ image->colorspace=RGBColorspace;}
+  if(ipl_info.colors == 3){ SetImageColorspace(image,sRGBColorspace,exception);}
   else { image->colorspace = GRAYColorspace; }
   ipl_info.z=ReadBlobLong(image); 
   ipl_info.time=ReadBlobLong(image); 
@@ -301,19 +304,22 @@ static Image *ReadIPLImage(const ImageInfo *image_info,ExceptionInfo *exception)
 
   /* Thats all we need if we are pinging. */
   if (image_info->ping != MagickFalse)
-  {
-    (void) CloseBlob(image);
-    return(GetFirstImageInList(image));
-  }
+    {
+      (void) CloseBlob(image);
+      return(GetFirstImageInList(image));
+    }
   length=image->columns;
   quantum_type=GetQuantumType(image,exception);
  do
   {
     SetHeaderFromIPL(image, &ipl_info);
 
-  if ((image_info->ping != MagickFalse) && (image_info->number_scenes != 0))
+    if ((image_info->ping != MagickFalse) && (image_info->number_scenes != 0))
       if (image->scene >= (image_info->scene+image_info->number_scenes-1))
         break;
+    status=SetImageExtent(image,image->columns,image->rows,exception);
+    if (status == MagickFalse)
+      return(DestroyImageList(image));
 /*
    printf("Length: %.20g, Memory size: %.20g\n", (double) length,(double)
      image->depth);
@@ -324,7 +330,7 @@ static Image *ReadIPLImage(const ImageInfo *image_info,ExceptionInfo *exception)
      status=SetQuantumFormat(image,quantum_info,quantum_format);
      if (status == MagickFalse)
        ThrowReaderException(ResourceLimitError,"MemoryAllocationFailed");
-     pixels=GetQuantumPixels(quantum_info); 
+     pixels=(unsigned char *) GetQuantumPixels(quantum_info); 
      if(image->columns != ipl_info.width){
 /*
      printf("Columns not set correctly!  Wanted: %.20g, got: %.20g\n",
@@ -340,7 +346,7 @@ static Image *ReadIPLImage(const ImageInfo *image_info,ExceptionInfo *exception)
       for(y = 0; y < (ssize_t) image->rows; y++){
         (void) ReadBlob(image, length*image->depth/8, pixels);
         q=QueueAuthenticPixels(image,0,y,image->columns,1,exception);
-        if (q == (PixelPacket *) NULL)
+        if (q == (Quantum *) NULL)
                 break;
         (void) ImportQuantumPixels(image,(CacheView *) NULL,quantum_info,
           GrayQuantum,pixels,exception);
@@ -352,7 +358,7 @@ static Image *ReadIPLImage(const ImageInfo *image_info,ExceptionInfo *exception)
       for(y = 0; y < (ssize_t) image->rows; y++){
         (void) ReadBlob(image, length*image->depth/8, pixels);
         q=QueueAuthenticPixels(image,0,y,image->columns,1,exception);
-        if (q == (PixelPacket *) NULL)
+        if (q == (Quantum *) NULL)
                 break;
         (void) ImportQuantumPixels(image,(CacheView *) NULL,quantum_info,
           RedQuantum,pixels,exception);  
@@ -362,7 +368,7 @@ static Image *ReadIPLImage(const ImageInfo *image_info,ExceptionInfo *exception)
       for(y = 0; y < (ssize_t) image->rows; y++){
         (void) ReadBlob(image, length*image->depth/8, pixels);
         q=QueueAuthenticPixels(image,0,y,image->columns,1,exception);
-        if (q == (PixelPacket *) NULL)
+        if (q == (Quantum *) NULL)
           break;
         (void) ImportQuantumPixels(image,(CacheView *) NULL,quantum_info,
           GreenQuantum,pixels,exception);
@@ -372,7 +378,7 @@ static Image *ReadIPLImage(const ImageInfo *image_info,ExceptionInfo *exception)
       for(y = 0; y < (ssize_t) image->rows; y++){
         (void) ReadBlob(image, length*image->depth/8, pixels);
         q=QueueAuthenticPixels(image,0,y,image->columns,1,exception);
-        if (q == (PixelPacket *) NULL)
+        if (q == (Quantum *) NULL)
           break;
         (void) ImportQuantumPixels(image,(CacheView *) NULL,quantum_info,
           BlueQuantum,pixels,exception);
@@ -395,7 +401,7 @@ static Image *ReadIPLImage(const ImageInfo *image_info,ExceptionInfo *exception)
       /*
        Proceed to next image.
        */
-      AcquireNextImage(image_info, image);
+      AcquireNextImage(image_info,image,exception);
       if (GetNextImageInList(image) == (Image *) NULL)
       {
         image=DestroyImageList(image);
@@ -433,14 +439,11 @@ ModuleExport size_t RegisterIPLImage(void)
   MagickInfo
     *entry;
   
-  entry=SetMagickInfo("IPL");
+  entry=AcquireMagickInfo("IPL","IPL","IPL Image Sequence");
   entry->decoder=(DecodeImageHandler *) ReadIPLImage;
   entry->encoder=(EncodeImageHandler *) WriteIPLImage;
   entry->magick=(IsImageFormatHandler *) IsIPL;
-  entry->adjoin=MagickTrue;
-  entry->description=ConstantString("IPL Image Sequence");
-  entry->module=ConstantString("IPL");
-  entry->endian_support=MagickTrue;
+  entry->flags|=CoderEndianSupportFlag;
   (void) RegisterMagickInfo(entry);
   return(MagickImageCoderSignature);
 }
@@ -470,35 +473,35 @@ ModuleExport void UnregisterIPLImage(void)
 }
 
 /*
- %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
- %                                                                             %
- %                                                                             %
- %                                                                             %
- %   W r i t e I P L I m a g e                                                 %
- %                                                                             %
- %                                                                             %
- %                                                                             %
- %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
- %
- %  WriteIPLImage() writes an image to a file in Scanalytics IPLabimage format.
- %
- %  The format of the WriteIPLImage method is:
- %
- %      MagickBooleanType WriteIPLImage(const ImageInfo *image_info,Image *image)
- %
- %  A description of each parameter follows.
- %
- %    o image_info: The image info.
- %
- %    o image:  The image.
- %
- */
-
-static MagickBooleanType WriteIPLImage(const ImageInfo *image_info,Image *image)
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%                                                                             %
+%                                                                             %
+%                                                                             %
+%   W r i t e I P L I m a g e                                                 %
+%                                                                             %
+%                                                                             %
+%                                                                             %
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%
+%  WriteIPLImage() writes an image to a file in Scanalytics IPLabimage format.
+%
+%  The format of the WriteIPLImage method is:
+%
+%      MagickBooleanType WriteIPLImage(const ImageInfo *image_info,Image *image)
+%       Image *image,ExceptionInfo *exception)
+%
+%  A description of each parameter follows.
+%
+%    o image_info: The image info.
+%
+%    o image:  The image.
+%
+%    o exception: return any errors or warnings in this structure.
+%
+*/
+static MagickBooleanType WriteIPLImage(const ImageInfo *image_info,Image *image,
+  ExceptionInfo *exception)
 {
-  ExceptionInfo
-    *exception;
-
   IPLInfo
     ipl_info;
 
@@ -508,7 +511,7 @@ static MagickBooleanType WriteIPLImage(const ImageInfo *image_info,Image *image)
   MagickOffsetType
     scene;
   
-  register const PixelPacket
+  register const Quantum
     *p;
 
   QuantumInfo
@@ -524,20 +527,22 @@ static MagickBooleanType WriteIPLImage(const ImageInfo *image_info,Image *image)
     Open output image file.
   */
   assert(image_info != (const ImageInfo *) NULL);
-  assert(image_info->signature == MagickSignature);
+  assert(image_info->signature == MagickCoreSignature);
   assert(image != (Image *) NULL);
-  assert(image->signature == MagickSignature);
+  assert(image->signature == MagickCoreSignature);
   if (image->debug != MagickFalse)
     (void) LogMagickEvent(TraceEvent,GetMagickModule(),"%s",image->filename);
-  status=OpenBlob(image_info,image,WriteBinaryBlobMode,&image->exception);
+  assert(exception != (ExceptionInfo *) NULL);
+  assert(exception->signature == MagickCoreSignature);
+  status=OpenBlob(image_info,image,WriteBinaryBlobMode,exception);
   if (status == MagickFalse)
     return(status);
   scene=0;
   
 
-  quantum_info=AcquireQuantumInfo(image_info, image);
+  quantum_info=AcquireQuantumInfo(image_info,image);
   if ((quantum_info->format == UndefinedQuantumFormat) &&
-      (IsHighDynamicRangeImage(image,&image->exception) != MagickFalse))
+      (IsHighDynamicRangeImage(image,exception) != MagickFalse))
     SetQuantumFormat(image,quantum_info,FloatingPointQuantumFormat);
   switch(quantum_info->depth){
   case 8: 
@@ -572,11 +577,8 @@ static MagickBooleanType WriteIPLImage(const ImageInfo *image_info,Image *image)
   ipl_info.time = 1;
   ipl_info.width = (unsigned int) image->columns;
   ipl_info.height = (unsigned int) image->rows;
-  
-  if (image->colorspace != RGBColorspace)
-    (void) TransformImageColorspace(image,RGBColorspace);
-  
-  if(image->colorspace == RGBColorspace) { ipl_info.colors = 3; }
+  (void) TransformImageColorspace(image,sRGBColorspace,exception);
+  if(IssRGBCompatibleColorspace(image->colorspace) != MagickFalse) { ipl_info.colors = 3; }
   else{ ipl_info.colors = 1; }
   
   ipl_info.size = (unsigned int) (28 + 
@@ -611,52 +613,51 @@ static MagickBooleanType WriteIPLImage(const ImageInfo *image_info,Image *image)
   (void) WriteBlobLong(image, ipl_info.time);
   (void) WriteBlobLong(image, ipl_info.byteType);
   
-  exception=(&image->exception);
   do
     {
       /*
   Convert MIFF to IPL raster pixels.
       */
-      pixels=GetQuantumPixels(quantum_info);
+      pixels=(unsigned char *) GetQuantumPixels(quantum_info);
   if(ipl_info.colors == 1){
   /* Red frame */
   for(y = 0; y < (ssize_t) ipl_info.height; y++){
-    p=GetAuthenticPixels(image,0,y,image->columns,1,exception);
-    if (p == (PixelPacket *) NULL)
+    p=GetVirtualPixels(image,0,y,image->columns,1,exception);
+    if (p == (const Quantum *) NULL)
       break;
-      (void) ExportQuantumPixels(image,(const CacheView *) NULL, quantum_info,
-        GrayQuantum, pixels,&image->exception);
-      (void) WriteBlob(image, image->columns*image->depth/8, pixels);
+    (void) ExportQuantumPixels(image,(CacheView *) NULL, quantum_info,
+      GrayQuantum, pixels,exception);
+    (void) WriteBlob(image, image->columns*image->depth/8, pixels);
   }
 
 }
   if(ipl_info.colors == 3){
   /* Red frame */
   for(y = 0; y < (ssize_t) ipl_info.height; y++){
-    p=GetAuthenticPixels(image,0,y,image->columns,1,exception);
-    if (p == (PixelPacket *) NULL)
+    p=GetVirtualPixels(image,0,y,image->columns,1,exception);
+    if (p == (const Quantum *) NULL)
       break;
-      (void) ExportQuantumPixels(image,(const CacheView *) NULL, quantum_info,
-        RedQuantum, pixels,&image->exception);
-      (void) WriteBlob(image, image->columns*image->depth/8, pixels);
+    (void) ExportQuantumPixels(image,(CacheView *) NULL, quantum_info,
+      RedQuantum, pixels,exception);
+    (void) WriteBlob(image, image->columns*image->depth/8, pixels);
   }
 
     /* Green frame */
     for(y = 0; y < (ssize_t) ipl_info.height; y++){
-      p=GetVirtualPixels(image,0,y,image->columns,1,&image->exception);
-      if (p == (PixelPacket *) NULL)
+      p=GetVirtualPixels(image,0,y,image->columns,1,exception);
+      if (p == (const Quantum *) NULL)
         break;
-        (void) ExportQuantumPixels(image,(const CacheView *) NULL, quantum_info,
-          GreenQuantum, pixels,&image->exception);
-        (void) WriteBlob(image, image->columns*image->depth/8, pixels);
+      (void) ExportQuantumPixels(image,(CacheView *) NULL, quantum_info,
+        GreenQuantum, pixels,exception);
+      (void) WriteBlob(image, image->columns*image->depth/8, pixels);
     }
     /* Blue frame */
     for(y = 0; y < (ssize_t) ipl_info.height; y++){
-      p=GetVirtualPixels(image,0,y,image->columns,1,&image->exception);
-      if (p == (PixelPacket *) NULL)
+      p=GetVirtualPixels(image,0,y,image->columns,1,exception);
+      if (p == (const Quantum *) NULL)
         break;
-      (void) ExportQuantumPixels(image,(const CacheView *) NULL, quantum_info,
-        BlueQuantum, pixels,&image->exception);
+      (void) ExportQuantumPixels(image,(CacheView *) NULL, quantum_info,
+        BlueQuantum, pixels,exception);
       (void) WriteBlob(image, image->columns*image->depth/8, pixels);
       if (image->previous == (Image *) NULL)
         {
@@ -668,8 +669,8 @@ static MagickBooleanType WriteIPLImage(const ImageInfo *image_info,Image *image)
     }
   }
   quantum_info=DestroyQuantumInfo(quantum_info);
-      if (GetNextImageInList(image) == (Image *) NULL)
-  break;
+  if (GetNextImageInList(image) == (Image *) NULL)
+    break;
       image=SyncNextImageInList(image);
       status=SetImageProgress(image,SaveImagesTag,scene++,
         GetImageListLength(image));

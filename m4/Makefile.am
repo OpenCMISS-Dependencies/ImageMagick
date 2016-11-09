@@ -1,4 +1,4 @@
-#  Copyright 1999-2011 ImageMagick Studio LLC, a non-profit organization
+#  Copyright 1999-2016 ImageMagick Studio LLC, a non-profit organization
 #  dedicated to making software imaging solutions freely available.
 #
 #  You may not use this file except in compliance with the License.  You may
@@ -16,7 +16,7 @@
 
 M4_EXTRA_DIST =  \
 	ac_func_fseeko.m4  \
-	argz.m4  \
+	ax_append_flag.m4  \
 	ax_c___attribute__.m4  \
 	ax_cflags_warn_all.m4  \
 	ax_compare_version.m4  \
@@ -28,15 +28,14 @@ M4_EXTRA_DIST =  \
 	ax_prefix_config_h.m4  \
 	ax_prog_perl_version.m4  \
 	ax_pthread.m4  \
+	ax_require_defined.m4  \
 	cxx_have_lstring.m4  \
 	cxx_have_std_libs.m4  \
 	framework.m4  \
 	libtool.m4  \
-	ltdl.m4  \
 	lt~obsolete.m4  \
 	ltoptions.m4  \
 	ltsugar.m4  \
 	ltversion.m4  \
 	magick_check_pthread_lib.m4  \
-	magick_func_mmap_fileio.m4  \
 	pkg.m4  

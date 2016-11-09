@@ -1,6 +1,7 @@
 // This may look like C code, but it is really -*- C++ -*-
 //
 // Copyright Bob Friesenhahn, 2001, 2002
+// Copyright Dirk Lemstra 2013-2015
 //
 // CoderInfo implementation
 //
@@ -14,109 +15,139 @@
 
 using namespace std;
 
-// Default constructor
-Magick::CoderInfo::CoderInfo ( void )
-  : _name(),
+Magick::CoderInfo::CoderInfo(void)
+  : _decoderThreadSupport(false),
     _description(),
+    _encoderThreadSupport(false),
+    _isMultiFrame(false),
     _isReadable(false),
     _isWritable(false),
-    _isMultiFrame(false)
+    _mimeType(),
+    _module(),
+    _name()
 {
 }
 
-// Copy constructor
-Magick::CoderInfo::CoderInfo ( const Magick::CoderInfo &coder_ )
+Magick::CoderInfo::CoderInfo(const Magick::CoderInfo &coder_)
+  : _decoderThreadSupport(coder_._decoderThreadSupport),
+    _description(coder_._description),
+    _encoderThreadSupport(coder_._encoderThreadSupport),
+    _isMultiFrame(coder_._isMultiFrame),
+    _isReadable(coder_._isReadable),
+    _isWritable(coder_._isWritable),
+    _mimeType(coder_._mimeType),
+    _module(coder_._module),
+    _name(coder_._name)
 {
-  _name         = coder_._name;
-  _description  = coder_._description;
-  _isReadable   = coder_._isReadable;
-  _isWritable   = coder_._isWritable;
-  _isMultiFrame = coder_._isMultiFrame;
 }
 
-Magick::CoderInfo::CoderInfo ( const std::string &name_ )
-  : _name(),
+Magick::CoderInfo::CoderInfo(const std::string &name_)
+  : _decoderThreadSupport(false),
     _description(),
+    _encoderThreadSupport(false),
+    _isMultiFrame(false),
     _isReadable(false),
     _isWritable(false),
-    _isMultiFrame(false)
+    _mimeType(),
+    _module(),
+    _name()
 {
-  ExceptionInfo exceptionInfo;
-  GetExceptionInfo( &exceptionInfo );
-  const Magick::MagickInfo *magickInfo = GetMagickInfo( name_.c_str(), &exceptionInfo );
-  throwException( exceptionInfo );
-  (void) DestroyExceptionInfo( &exceptionInfo );
-  if( magickInfo == 0 )
-    {
-      throwExceptionExplicit(OptionError, "Coder not found", name_.c_str() );
-    }
+  const Magick::MagickInfo
+    *magickInfo;
+
+  GetPPException;
+  magickInfo=GetMagickInfo(name_.c_str(),exceptionInfo);
+  ThrowPPException(false);
+  if (magickInfo == 0)
+    throwExceptionExplicit(MagickCore::OptionError,"Coder not found",
+      name_.c_str());
   else
     {
-      _name         = string(magickInfo->name);
-      _description  = string(magickInfo->description);
-      _isReadable   = ((magickInfo->decoder == 0) ? false : true);
-      _isWritable   = ((magickInfo->encoder == 0) ? false : true);
-      _isMultiFrame = ((magickInfo->adjoin == 0) ? false : true);
+      _decoderThreadSupport=(GetMagickDecoderThreadSupport(magickInfo) ==
+        MagickTrue) ? true : false;
+      _description=std::string(magickInfo->description);
+      _encoderThreadSupport=(GetMagickEncoderThreadSupport(magickInfo) ==
+        MagickTrue) ? true : false;
+      _isMultiFrame=(GetMagickAdjoin(magickInfo) == MagickTrue) ? true : false;
+      _isReadable=((magickInfo->decoder == (MagickCore::DecodeImageHandler *)
+        NULL) ? false : true);
+      _isWritable=((magickInfo->encoder == (MagickCore::EncodeImageHandler *)
+        NULL) ? false : true);
+      _mimeType=std::string(magickInfo->mime_type != (char *) NULL ?
+        magickInfo->mime_type : "");
+      _module=std::string(magickInfo->module);
+      _name=std::string(magickInfo->name);
     }
 }
 
-Magick::CoderInfo::~CoderInfo ( void )
+Magick::CoderInfo::~CoderInfo(void)
 {
-  // Nothing to do
 }
 
-// Format name
-std::string Magick::CoderInfo::name( void ) const
-{
-  return _name;
-}
-
-// Format description
-std::string Magick::CoderInfo::description( void ) const
-{
-  return _description;
-}
-
-// Format is readable
-bool Magick::CoderInfo::isReadable( void ) const
-{
-  return _isReadable;
-}
-
-// Format is writeable
-bool Magick::CoderInfo::isWritable( void ) const
-{
-  return _isWritable;
-}
-
-// Format supports multiple frames
-bool Magick::CoderInfo::isMultiFrame( void ) const
-{
-  return _isMultiFrame;
-}
-
-// Assignment operator
-Magick::CoderInfo& Magick::CoderInfo::operator= (const CoderInfo &coder_ )
+Magick::CoderInfo& Magick::CoderInfo::operator=(const CoderInfo &coder_)
 {
   // If not being set to ourself
   if (this != &coder_)
     {
-      _name         = coder_._name;
-      _description  = coder_._description;
-      _isReadable   = coder_._isReadable;
-      _isWritable   = coder_._isWritable;
-      _isMultiFrame = coder_._isMultiFrame;
+      _decoderThreadSupport=coder_._decoderThreadSupport;
+      _description=coder_._description;
+      _encoderThreadSupport=coder_._encoderThreadSupport;
+      _isMultiFrame=coder_._isMultiFrame;
+      _isReadable=coder_._isReadable;
+      _isWritable=coder_._isWritable;
+      _mimeType=coder_._mimeType;
+      _module=coder_._module;
+      _name=coder_._name;
     }
-  return *this;
+  return(*this);
 }
 
-// Construct from MagickCore::MagickInfo*
-Magick::CoderInfo::CoderInfo ( const MagickCore::MagickInfo *magickInfo_ )
-  : _name(string(magickInfo_->name ? magickInfo_->name : "")),
-    _description(string(magickInfo_->description ? magickInfo_->description : "")),
-    _isReadable(magickInfo_->decoder ? true : false),
-    _isWritable(magickInfo_->encoder ? true : false),
-    _isMultiFrame(magickInfo_->adjoin ? true : false)
+bool Magick::CoderInfo::canReadMultithreaded(void) const
 {
-  // Nothing more to do
+  return(_decoderThreadSupport);
+}
+
+bool Magick::CoderInfo::canWriteMultithreaded(void) const
+{
+  return(_encoderThreadSupport);
+}
+
+std::string Magick::CoderInfo::description(void) const
+{
+  return(_description);
+}
+
+bool Magick::CoderInfo::isReadable(void) const
+{
+  return(_isReadable);
+}
+
+bool Magick::CoderInfo::isWritable(void) const
+{
+  return(_isWritable);
+}
+
+bool Magick::CoderInfo::isMultiFrame(void) const
+{
+  return(_isMultiFrame);
+}
+
+std::string Magick::CoderInfo::mimeType(void) const
+{
+  return(_mimeType);
+}
+
+std::string Magick::CoderInfo::module(void) const
+{
+  return(_module);
+}
+
+std::string Magick::CoderInfo::name(void) const
+{
+  return(_name);
+}
+
+bool Magick::CoderInfo::unregister(void) const
+{
+  return(UnregisterMagickInfo(_name.c_str()) != MagickFalse);
 }

@@ -36,17 +36,17 @@ int main( int /*argc*/, char ** argv)
     // Draw texture-filled polygon
     //
     // Polygon list
-    std::list<Coordinate> poly_coord;
+    std::vector<Coordinate> poly_coord;
     poly_coord.push_back( Coordinate(30,30) );
     poly_coord.push_back( Coordinate(100,10) );
     poly_coord.push_back( Coordinate(190,290) );
     poly_coord.push_back( Coordinate(30,290) );
 
     Image texture( srcdir + "tile.miff" );
-    image.penTexture( texture );
+    image.fillPattern( texture );
     image.draw( DrawablePolygon( poly_coord ) );
     texture.isValid( false );
-    image.penTexture( texture );  // Unset texture
+    image.fillPattern( texture );  // Unset texture
 
     //
     // Draw filled ellipse with black border, and red fill color
@@ -62,7 +62,7 @@ int main( int /*argc*/, char ** argv)
     //
     image.strokeColor( "black" );
     image.strokeWidth( 5 );
-    list<Drawable> drawlist;
+    vector<Drawable> drawlist;
 
     // Add polygon to list
     poly_coord.clear();

@@ -13,11 +13,11 @@
 %                  Read/Write Image Colormaps As An Image File.               %
 %                                                                             %
 %                              Software Design                                %
-%                                John Cristy                                  %
+%                                   Cristy                                    %
 %                                 July 1992                                   %
 %                                                                             %
 %                                                                             %
-%  Copyright 1999-2011 ImageMagick Studio LLC, a non-profit organization      %
+%  Copyright 1999-2016 ImageMagick Studio LLC, a non-profit organization      %
 %  dedicated to making software imaging solutions freely available.           %
 %                                                                             %
 %  You may not use this file except in compliance with the License.  You may  %
@@ -39,35 +39,37 @@
 /*
   Include declarations.
 */
-#include "magick/studio.h"
-#include "magick/attribute.h"
-#include "magick/blob.h"
-#include "magick/blob-private.h"
-#include "magick/cache.h"
-#include "magick/color.h"
-#include "magick/color-private.h"
-#include "magick/colormap.h"
-#include "magick/colormap-private.h"
-#include "magick/colorspace.h"
-#include "magick/exception.h"
-#include "magick/exception-private.h"
-#include "magick/histogram.h"
-#include "magick/image.h"
-#include "magick/image-private.h"
-#include "magick/list.h"
-#include "magick/magick.h"
-#include "magick/memory_.h"
-#include "magick/quantum-private.h"
-#include "magick/static.h"
-#include "magick/statistic.h"
-#include "magick/string_.h"
-#include "magick/module.h"
+#include "MagickCore/studio.h"
+#include "MagickCore/attribute.h"
+#include "MagickCore/blob.h"
+#include "MagickCore/blob-private.h"
+#include "MagickCore/cache.h"
+#include "MagickCore/color.h"
+#include "MagickCore/color-private.h"
+#include "MagickCore/colormap.h"
+#include "MagickCore/colormap-private.h"
+#include "MagickCore/colorspace.h"
+#include "MagickCore/colorspace-private.h"
+#include "MagickCore/exception.h"
+#include "MagickCore/exception-private.h"
+#include "MagickCore/histogram.h"
+#include "MagickCore/image.h"
+#include "MagickCore/image-private.h"
+#include "MagickCore/list.h"
+#include "MagickCore/magick.h"
+#include "MagickCore/memory_.h"
+#include "MagickCore/pixel-accessor.h"
+#include "MagickCore/quantum-private.h"
+#include "MagickCore/static.h"
+#include "MagickCore/statistic.h"
+#include "MagickCore/string_.h"
+#include "MagickCore/module.h"
 
 /*
   Forward declarations.
 */
 static MagickBooleanType
-  WriteMAPImage(const ImageInfo *,Image *);
+  WriteMAPImage(const ImageInfo *,Image *,ExceptionInfo *);
 
 /*
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -100,19 +102,16 @@ static Image *ReadMAPImage(const ImageInfo *image_info,ExceptionInfo *exception)
   Image
     *image;
 
-  IndexPacket
-    index;
-
   MagickBooleanType
     status;
 
-  register IndexPacket
-    *indexes;
+  Quantum
+    index;
 
   register ssize_t
     x;
 
-  register PixelPacket
+  register Quantum
     *q;
 
   register ssize_t
@@ -138,13 +137,13 @@ static Image *ReadMAPImage(const ImageInfo *image_info,ExceptionInfo *exception)
     Open image file.
   */
   assert(image_info != (const ImageInfo *) NULL);
-  assert(image_info->signature == MagickSignature);
+  assert(image_info->signature == MagickCoreSignature);
   if (image_info->debug != MagickFalse)
     (void) LogMagickEvent(TraceEvent,GetMagickModule(),"%s",
       image_info->filename);
   assert(exception != (ExceptionInfo *) NULL);
-  assert(exception->signature == MagickSignature);
-  image=AcquireImage(image_info);
+  assert(exception->signature == MagickCoreSignature);
+  image=AcquireImage(image_info,exception);
   if ((image->columns == 0) || (image->rows == 0))
     ThrowReaderException(OptionError,"MustSpecifyImageSize");
   status=OpenBlob(image_info,image,ReadBinaryBlobMode,exception);
@@ -158,7 +157,7 @@ static Image *ReadMAPImage(const ImageInfo *image_info,ExceptionInfo *exception)
   */
   image->storage_class=PseudoClass;
   status=AcquireImageColormap(image,(size_t)
-    (image->offset != 0 ? image->offset : 256));
+    (image->offset != 0 ? image->offset : 256),exception);
   if (status == MagickFalse)
     ThrowReaderException(ResourceLimitError,"MemoryAllocationFailed");
   depth=GetImageQuantumDepth(image,MagickTrue);
@@ -204,6 +203,9 @@ static Image *ReadMAPImage(const ImageInfo *image_info,ExceptionInfo *exception)
       (void) CloseBlob(image);
       return(GetFirstImageInList(image));
     }
+  status=SetImageExtent(image,image->columns,image->rows,exception);
+  if (status == MagickFalse)
+    return(DestroyImageList(image));
   /*
     Read image pixels.
   */
@@ -212,23 +214,24 @@ static Image *ReadMAPImage(const ImageInfo *image_info,ExceptionInfo *exception)
   {
     p=pixels;
     q=QueueAuthenticPixels(image,0,y,image->columns,1,exception);
-    if (q == (PixelPacket *) NULL)
+    if (q == (Quantum *) NULL)
       break;
-    indexes=GetAuthenticIndexQueue(image);
     count=ReadBlob(image,(size_t) packet_size*image->columns,pixels);
     if (count != (ssize_t) (packet_size*image->columns))
       break;
     for (x=0; x < (ssize_t) image->columns; x++)
     {
-      index=ConstrainColormapIndex(image,*p);
+      index=ConstrainColormapIndex(image,*p,exception);
       p++;
       if (image->colors > 256)
         {
-          index=ConstrainColormapIndex(image,((size_t) index << 8)+(*p));
+          index=ConstrainColormapIndex(image,((size_t) index << 8)+(*p),
+            exception);
           p++;
         }
-      SetIndexPixelComponent(indexes+x,index);
-      SetRGBOPixelComponents(q,image->colormap+(ssize_t) index);
+      SetPixelIndex(image,index,q);
+      SetPixelViaPixelInfo(image,image->colormap+(ssize_t) index,q);
+      q+=GetPixelChannels(image);
     }
     if (SyncAuthenticPixels(image,exception) == MagickFalse)
       break;
@@ -269,15 +272,13 @@ ModuleExport size_t RegisterMAPImage(void)
   MagickInfo
     *entry;
 
-  entry=SetMagickInfo("MAP");
+  entry=AcquireMagickInfo("MAP","MAP","Colormap intensities and indices");
   entry->decoder=(DecodeImageHandler *) ReadMAPImage;
   entry->encoder=(EncodeImageHandler *) WriteMAPImage;
-  entry->adjoin=MagickFalse;
+  entry->flags^=CoderAdjoinFlag;
   entry->format_type=ExplicitFormatType;
-  entry->raw=MagickTrue;
-  entry->endian_support=MagickTrue;
-  entry->description=ConstantString("Colormap intensities and indices");
-  entry->module=ConstantString("MAP");
+  entry->flags|=CoderRawSupportFlag;
+  entry->flags|=CoderEndianSupportFlag;
   (void) RegisterMagickInfo(entry);
   return(MagickImageCoderSignature);
 }
@@ -322,7 +323,8 @@ ModuleExport void UnregisterMAPImage(void)
 %
 %  The format of the WriteMAPImage method is:
 %
-%      MagickBooleanType WriteMAPImage(const ImageInfo *image_info,Image *image)
+%      MagickBooleanType WriteMAPImage(const ImageInfo *image_info,
+%        Image *image,ExceptionInfo *exception)
 %
 %  A description of each parameter follows.
 %
@@ -330,17 +332,16 @@ ModuleExport void UnregisterMAPImage(void)
 %
 %    o image:  The image.
 %
+%    o exception: return any errors or warnings in this structure.
 %
 */
-static MagickBooleanType WriteMAPImage(const ImageInfo *image_info,Image *image)
+static MagickBooleanType WriteMAPImage(const ImageInfo *image_info,Image *image,
+  ExceptionInfo *exception)
 {
   MagickBooleanType
     status;
 
-  register const IndexPacket
-    *indexes;
-
-  register const PixelPacket
+  register const Quantum
     *p;
 
   register ssize_t
@@ -365,21 +366,22 @@ static MagickBooleanType WriteMAPImage(const ImageInfo *image_info,Image *image)
     Open output image file.
   */
   assert(image_info != (const ImageInfo *) NULL);
-  assert(image_info->signature == MagickSignature);
+  assert(image_info->signature == MagickCoreSignature);
   assert(image != (Image *) NULL);
-  assert(image->signature == MagickSignature);
+  assert(image->signature == MagickCoreSignature);
   if (image->debug != MagickFalse)
     (void) LogMagickEvent(TraceEvent,GetMagickModule(),"%s",image->filename);
-  status=OpenBlob(image_info,image,WriteBinaryBlobMode,&image->exception);
+  assert(exception != (ExceptionInfo *) NULL);
+  assert(exception->signature == MagickCoreSignature);
+  status=OpenBlob(image_info,image,WriteBinaryBlobMode,exception);
   if (status == MagickFalse)
     return(status);
-  if (image->colorspace != RGBColorspace)
-    (void) TransformImageColorspace(image,RGBColorspace);
+  (void) TransformImageColorspace(image,sRGBColorspace,exception);
   /*
     Allocate colormap.
   */
-  if (IsPaletteImage(image,&image->exception) == MagickFalse)
-    (void) SetImageType(image,PaletteType);
+  if (IsPaletteImage(image) == MagickFalse)
+    (void) SetImageType(image,PaletteType,exception);
   depth=GetImageQuantumDepth(image,MagickTrue);
   packet_size=(size_t) (depth/8);
   pixels=(unsigned char *) AcquireQuantumMemory(image->columns,packet_size*
@@ -394,22 +396,23 @@ static MagickBooleanType WriteMAPImage(const ImageInfo *image_info,Image *image)
     Write colormap to file.
   */
   q=colormap;
-  if (image->depth <= 8)
+  q=colormap;
+  if (image->colors <= 256)
     for (i=0; i < (ssize_t) image->colors; i++)
     {
-      *q++=(unsigned char) image->colormap[i].red;
-      *q++=(unsigned char) image->colormap[i].green;
-      *q++=(unsigned char) image->colormap[i].blue;
+      *q++=(unsigned char) ScaleQuantumToChar(image->colormap[i].red);
+      *q++=(unsigned char) ScaleQuantumToChar(image->colormap[i].green);
+      *q++=(unsigned char) ScaleQuantumToChar(image->colormap[i].blue);
     }
   else
     for (i=0; i < (ssize_t) image->colors; i++)
     {
-      *q++=(unsigned char) ((size_t) image->colormap[i].red >> 8);
-      *q++=(unsigned char) image->colormap[i].red;
-      *q++=(unsigned char) ((size_t) image->colormap[i].green >> 8);
-      *q++=(unsigned char) image->colormap[i].green;
-      *q++=(unsigned char) ((size_t) image->colormap[i].blue >> 8);
-      *q++=(unsigned char) image->colormap[i].blue;
+      *q++=(unsigned char) (ScaleQuantumToShort(image->colormap[i].red) >> 8);
+      *q++=(unsigned char) (ScaleQuantumToShort(image->colormap[i].red) & 0xff);
+      *q++=(unsigned char) (ScaleQuantumToShort(image->colormap[i].green) >> 8);
+      *q++=(unsigned char) (ScaleQuantumToShort(image->colormap[i].green) & 0xff);;
+      *q++=(unsigned char) (ScaleQuantumToShort(image->colormap[i].blue) >> 8);
+      *q++=(unsigned char) (ScaleQuantumToShort(image->colormap[i].blue) & 0xff);
     }
   (void) WriteBlob(image,packet_size*image->colors,colormap);
   colormap=(unsigned char *) RelinquishMagickMemory(colormap);
@@ -418,16 +421,16 @@ static MagickBooleanType WriteMAPImage(const ImageInfo *image_info,Image *image)
   */
   for (y=0; y < (ssize_t) image->rows; y++)
   {
-    p=GetVirtualPixels(image,0,y,image->columns,1,&image->exception);
-    if (p == (const PixelPacket *) NULL)
+    p=GetVirtualPixels(image,0,y,image->columns,1,exception);
+    if (p == (const Quantum *) NULL)
       break;
-    indexes=GetVirtualIndexQueue(image);
     q=pixels;
     for (x=0; x < (ssize_t) image->columns; x++)
     {
       if (image->colors > 256)
-        *q++=(unsigned char) ((size_t) GetIndexPixelComponent(indexes+x) >> 8);
-      *q++=(unsigned char) GetIndexPixelComponent(indexes+x);
+        *q++=(unsigned char) ((size_t) GetPixelIndex(image,p) >> 8);
+      *q++=(unsigned char) GetPixelIndex(image,p);
+      p+=GetPixelChannels(image);
     }
     (void) WriteBlob(image,(size_t) (q-pixels),pixels);
   }

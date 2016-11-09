@@ -13,12 +13,12 @@
 %                     Write Postscript Level III Format                       %
 %                                                                             %
 %                              Software Design                                %
-%                                John Cristy                                  %
+%                                   Cristy                                    %
 %                              Lars Ruben Skyum                               %
 %                                 July 1992                                   %
 %                                                                             %
 %                                                                             %
-%  Copyright 1999-2011 ImageMagick Studio LLC, a non-profit organization      %
+%  Copyright 1999-2016 ImageMagick Studio LLC, a non-profit organization      %
 %  dedicated to making software imaging solutions freely available.           %
 %                                                                             %
 %  You may not use this file except in compliance with the License.  You may  %
@@ -40,35 +40,39 @@
 /*
   Include declarations.
 */
-#include "magick/studio.h"
-#include "magick/blob.h"
-#include "magick/blob-private.h"
-#include "magick/cache.h"
-#include "magick/color.h"
-#include "magick/color-private.h"
-#include "magick/compress.h"
-#include "magick/constitute.h"
-#include "magick/draw.h"
-#include "magick/exception.h"
-#include "magick/exception-private.h"
-#include "magick/geometry.h"
-#include "magick/image.h"
-#include "magick/image-private.h"
-#include "magick/list.h"
-#include "magick/magick.h"
-#include "magick/memory_.h"
-#include "magick/monitor.h"
-#include "magick/monitor-private.h"
-#include "magick/option.h"
-#include "magick/property.h"
-#include "magick/quantum-private.h"
-#include "magick/resource_.h"
-#include "magick/static.h"
-#include "magick/string_.h"
-#include "magick/module.h"
-#include "magick/token.h"
-#include "magick/utility.h"
-#include "magick/module.h"
+#include "MagickCore/studio.h"
+#include "MagickCore/artifact.h"
+#include "MagickCore/attribute.h"
+#include "MagickCore/blob.h"
+#include "MagickCore/blob-private.h"
+#include "MagickCore/cache.h"
+#include "MagickCore/channel.h"
+#include "MagickCore/color.h"
+#include "MagickCore/color-private.h"
+#include "MagickCore/compress.h"
+#include "MagickCore/constitute.h"
+#include "MagickCore/draw.h"
+#include "MagickCore/exception.h"
+#include "MagickCore/exception-private.h"
+#include "MagickCore/geometry.h"
+#include "MagickCore/image.h"
+#include "MagickCore/image-private.h"
+#include "MagickCore/list.h"
+#include "MagickCore/magick.h"
+#include "MagickCore/memory_.h"
+#include "MagickCore/monitor.h"
+#include "MagickCore/monitor-private.h"
+#include "MagickCore/option.h"
+#include "MagickCore/pixel-accessor.h"
+#include "MagickCore/property.h"
+#include "MagickCore/quantum-private.h"
+#include "MagickCore/resource_.h"
+#include "MagickCore/static.h"
+#include "MagickCore/string_.h"
+#include "MagickCore/module.h"
+#include "MagickCore/token.h"
+#include "MagickCore/utility.h"
+#include "MagickCore/module.h"
 
 /*
   Define declarations.
@@ -96,7 +100,7 @@
   Forward declarations.
 */
 static MagickBooleanType
-  WritePS3Image(const ImageInfo *,Image *);
+  WritePS3Image(const ImageInfo *,Image *,ExceptionInfo *);
 
 /*
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -125,17 +129,15 @@ ModuleExport size_t RegisterPS3Image(void)
   MagickInfo
     *entry;
 
-  entry=SetMagickInfo("EPS3");
+  entry=AcquireMagickInfo("PS3","EPS3","Level III Encapsulated PostScript");
   entry->encoder=(EncodeImageHandler *) WritePS3Image;
-  entry->description=ConstantString("Level III Encapsulated PostScript");
-  entry->module=ConstantString("PS3");
-  entry->seekable_stream=MagickTrue;
+  entry->mime_type=ConstantString("application/postscript");
+  entry->flags|=CoderSeekableStreamFlag;
   (void) RegisterMagickInfo(entry);
-  entry=SetMagickInfo("PS3");
+  entry=AcquireMagickInfo("PS3","PS3","Level III PostScript");
   entry->encoder=(EncodeImageHandler *) WritePS3Image;
-  entry->description=ConstantString("Level III PostScript");
-  entry->module=ConstantString("PS3");
-  entry->seekable_stream=MagickTrue;
+  entry->mime_type=ConstantString("application/postscript");
+  entry->flags|=CoderSeekableStreamFlag;
   (void) RegisterMagickInfo(entry);
   return(MagickImageCoderSignature);
 }
@@ -183,7 +185,8 @@ ModuleExport void UnregisterPS3Image(void)
 %
 %  The format of the WritePS3Image method is:
 %
-%      MagickBooleanType WritePS3Image(const ImageInfo *image_info,Image *image)
+%      MagickBooleanType WritePS3Image(const ImageInfo *image_info,
+%        Image *image,ExceptionInfo *exception)
 %
 %  A description of each parameter follows:
 %
@@ -191,10 +194,12 @@ ModuleExport void UnregisterPS3Image(void)
 %
 %    o image: the image.
 %
+%    o exception: return any errors or warnings in this structure.
+%
 */
 
 static MagickBooleanType Huffman2DEncodeImage(const ImageInfo *image_info,
-  Image *image,Image *inject_image)
+  Image *image,Image *inject_image,ExceptionInfo *exception)
 {
   Image
     *group4_image;
@@ -213,13 +218,13 @@ static MagickBooleanType Huffman2DEncodeImage(const ImageInfo *image_info,
 
   status=MagickTrue;
   write_info=CloneImageInfo(image_info);
-  (void) CopyMagickString(write_info->filename,"GROUP4:",MaxTextExtent);
-  (void) CopyMagickString(write_info->magick,"GROUP4",MaxTextExtent);
-  group4_image=CloneImage(inject_image,0,0,MagickTrue,&image->exception);
+  (void) CopyMagickString(write_info->filename,"GROUP4:",MagickPathExtent);
+  (void) CopyMagickString(write_info->magick,"GROUP4",MagickPathExtent);
+  group4_image=CloneImage(inject_image,0,0,MagickTrue,exception);
   if (group4_image == (Image *) NULL)
     return(MagickFalse);
   group4=(unsigned char *) ImageToBlob(write_info,group4_image,&length,
-    &image->exception);
+    exception);
   group4_image=DestroyImage(group4_image);
   if (group4 == (unsigned char *) NULL)
     return(MagickFalse);
@@ -231,15 +236,12 @@ static MagickBooleanType Huffman2DEncodeImage(const ImageInfo *image_info,
 }
 
 static MagickBooleanType SerializeImage(const ImageInfo *image_info,
-  Image *image,unsigned char **pixels,size_t *length)
+  Image *image,MemoryInfo **pixel_info,size_t *length,ExceptionInfo *exception)
 {
   MagickBooleanType
     status;
 
-  register const IndexPacket
-    *indexes;
-
-  register const PixelPacket
+  register const Quantum
     *p;
 
   register ssize_t
@@ -252,38 +254,37 @@ static MagickBooleanType SerializeImage(const ImageInfo *image_info,
     y;
 
   assert(image != (Image *) NULL);
-  assert(image->signature == MagickSignature);
+  assert(image->signature == MagickCoreSignature);
   if (image->debug != MagickFalse)
     (void) LogMagickEvent(TraceEvent,GetMagickModule(),"%s",image->filename);
   status=MagickTrue;
   *length=(image->colorspace == CMYKColorspace ? 4 : 3)*(size_t)
     image->columns*image->rows;
-  *pixels=(unsigned char *) AcquireQuantumMemory(*length,sizeof(**pixels));
-  if (*pixels == (unsigned char *) NULL)
+  *pixel_info=AcquireVirtualMemory(*length,sizeof(*q));
+  if (*pixel_info == (MemoryInfo *) NULL)
     ThrowWriterException(ResourceLimitError,"MemoryAllocationFailed");
-  q=(*pixels);
+  q=(unsigned char *) GetVirtualMemoryBlob(*pixel_info);
   for (y=0; y < (ssize_t) image->rows; y++)
   {
-    p=GetVirtualPixels(image,0,y,image->columns,1,&image->exception);
-    if (p == (const PixelPacket *) NULL)
+    p=GetVirtualPixels(image,0,y,image->columns,1,exception);
+    if (p == (const Quantum *) NULL)
       break;
-    indexes=GetVirtualIndexQueue(image);
     if (image->colorspace != CMYKColorspace)
       for (x=0; x < (ssize_t) image->columns; x++)
       {
-        *q++=ScaleQuantumToChar(GetRedPixelComponent(p));
-        *q++=ScaleQuantumToChar(GetGreenPixelComponent(p));
-        *q++=ScaleQuantumToChar(GetBluePixelComponent(p));
-        p++;
+        *q++=ScaleQuantumToChar(GetPixelRed(image,p));
+        *q++=ScaleQuantumToChar(GetPixelGreen(image,p));
+        *q++=ScaleQuantumToChar(GetPixelBlue(image,p));
+        p+=GetPixelChannels(image);
       }
     else
       for (x=0; x < (ssize_t) image->columns; x++)
       {
-        *q++=ScaleQuantumToChar(GetRedPixelComponent(p));
-        *q++=ScaleQuantumToChar(GetGreenPixelComponent(p));
-        *q++=ScaleQuantumToChar(GetBluePixelComponent(p));
-        *q++=ScaleQuantumToChar(GetIndexPixelComponent(indexes+x));
-        p++;
+        *q++=ScaleQuantumToChar(GetPixelRed(image,p));
+        *q++=ScaleQuantumToChar(GetPixelGreen(image,p));
+        *q++=ScaleQuantumToChar(GetPixelBlue(image,p));
+        *q++=ScaleQuantumToChar(GetPixelBlack(image,p));
+        p+=GetPixelChannels(image);
       }
     if (image->previous == (Image *) NULL)
       {
@@ -294,17 +295,17 @@ static MagickBooleanType SerializeImage(const ImageInfo *image_info,
       }
   }
   if (status == MagickFalse)
-    *pixels=(unsigned char *) RelinquishMagickMemory(*pixels);
+    *pixel_info=RelinquishVirtualMemory(*pixel_info);
   return(status);
 }
 
 static MagickBooleanType SerializeImageChannel(const ImageInfo *image_info,
-  Image *image,unsigned char **pixels,size_t *length)
+  Image *image,MemoryInfo **pixel_info,size_t *length,ExceptionInfo *exception)
 {
   MagickBooleanType
     status;
 
-  register const PixelPacket
+  register const Quantum
     *p;
 
   register ssize_t
@@ -325,27 +326,27 @@ static MagickBooleanType SerializeImageChannel(const ImageInfo *image_info,
     bit;
 
   assert(image != (Image *) NULL);
-  assert(image->signature == MagickSignature);
+  assert(image->signature == MagickCoreSignature);
   if (image->debug != MagickFalse)
     (void) LogMagickEvent(TraceEvent,GetMagickModule(),"%s",image->filename);
   status=MagickTrue;
-  pack=IsMonochromeImage(image,&image->exception) == MagickFalse ? 1UL : 8UL;
+  pack=SetImageMonochrome(image,exception) == MagickFalse ? 1UL : 8UL;
   padded_columns=((image->columns+pack-1)/pack)*pack;
   *length=(size_t) padded_columns*image->rows/pack;
-  *pixels=(unsigned char *) AcquireQuantumMemory(*length,sizeof(**pixels));
-  if (*pixels == (unsigned char *) NULL)
+  *pixel_info=AcquireVirtualMemory(*length,sizeof(*q));
+  if (*pixel_info == (MemoryInfo *) NULL)
     ThrowWriterException(ResourceLimitError,"MemoryAllocationFailed");
-  q=(*pixels);
+  q=(unsigned char *) GetVirtualMemoryBlob(*pixel_info);
   for (y=0; y < (ssize_t) image->rows; y++)
   {
-    p=GetVirtualPixels(image,0,y,image->columns,1,&image->exception);
-    if (p == (const PixelPacket *) NULL)
+    p=GetVirtualPixels(image,0,y,image->columns,1,exception);
+    if (p == (const Quantum *) NULL)
       break;
     if (pack == 1)
       for (x=0; x < (ssize_t) image->columns; x++)
       {
-        *q++=ScaleQuantumToChar(PixelIntensityToQuantum(p));
-        p++;
+        *q++=ScaleQuantumToChar(ClampToQuantum(GetPixelLuma(image,p)));
+        p+=GetPixelChannels(image);
       }
     else
       {
@@ -354,15 +355,15 @@ static MagickBooleanType SerializeImageChannel(const ImageInfo *image_info,
         {
           bit=(unsigned char) 0x00;
           if (x < (ssize_t) image->columns)
-            bit=(unsigned char) (PixelIntensityToQuantum(p) == (Quantum)
-              TransparentOpacity ? 0x01 : 0x00);
+            bit=(unsigned char) (GetPixelLuma(image,p) == TransparentAlpha ?
+              0x01 : 0x00);
           code=(code << 1)+bit;
           if (((x+1) % pack) == 0)
             {
               *q++=code;
               code='\0';
             }
-          p++;
+          p+=GetPixelChannels(image);
         }
       }
     status=SetImageProgress(image,SaveImageTag,(MagickOffsetType) y,
@@ -371,20 +372,17 @@ static MagickBooleanType SerializeImageChannel(const ImageInfo *image_info,
       break;
   }
   if (status == MagickFalse)
-    *pixels=(unsigned char *) RelinquishMagickMemory(*pixels);
+    *pixel_info=RelinquishVirtualMemory(*pixel_info);
   return(status);
 }
 
 static MagickBooleanType SerializeImageIndexes(const ImageInfo *image_info,
-  Image *image,unsigned char **pixels,size_t *length)
+  Image *image,MemoryInfo **pixel_info,size_t *length,ExceptionInfo *exception)
 {
   MagickBooleanType
     status;
 
-  register const IndexPacket
-    *indexes;
-
-  register const PixelPacket
+  register const Quantum
     *p;
 
   register ssize_t
@@ -397,23 +395,25 @@ static MagickBooleanType SerializeImageIndexes(const ImageInfo *image_info,
     y;
 
   assert(image != (Image *) NULL);
-  assert(image->signature == MagickSignature);
+  assert(image->signature == MagickCoreSignature);
   if (image->debug != MagickFalse)
     (void) LogMagickEvent(TraceEvent,GetMagickModule(),"%s",image->filename);
   status=MagickTrue;
   *length=(size_t) image->columns*image->rows;
-  *pixels=(unsigned char *) AcquireQuantumMemory(*length,sizeof(**pixels));
-  if (*pixels == (unsigned char *) NULL)
+  *pixel_info=AcquireVirtualMemory(*length,sizeof(*q));
+  if (*pixel_info == (MemoryInfo *) NULL)
     ThrowWriterException(ResourceLimitError,"MemoryAllocationFailed");
-  q=(*pixels);
+  q=(unsigned char *) GetVirtualMemoryBlob(*pixel_info);
   for (y=0; y < (ssize_t) image->rows; y++)
   {
-    p=GetVirtualPixels(image,0,y,image->columns,1,&image->exception);
-    if (p == (const PixelPacket *) NULL)
+    p=GetVirtualPixels(image,0,y,image->columns,1,exception);
+    if (p == (const Quantum *) NULL)
       break;
-    indexes=GetVirtualIndexQueue(image);
     for (x=0; x < (ssize_t) image->columns; x++)
-      *q++=(unsigned char) GetIndexPixelComponent(indexes+x);
+    {
+      *q++=(unsigned char) GetPixelIndex(image,p);
+      p+=GetPixelChannels(image);
+    }
     if (image->previous == (Image *) NULL)
       {
         status=SetImageProgress(image,SaveImageTag,(MagickOffsetType) y,
@@ -423,15 +423,15 @@ static MagickBooleanType SerializeImageIndexes(const ImageInfo *image_info,
       }
   }
   if (status == MagickFalse)
-    *pixels=(unsigned char *) RelinquishMagickMemory(*pixels);
+    *pixel_info=RelinquishVirtualMemory(*pixel_info);
   return(status);
 }
 
 static MagickBooleanType WritePS3MaskImage(const ImageInfo *image_info,
-  Image *image,const CompressionType compression)
+  Image *image,const CompressionType compression,ExceptionInfo *exception)
 {
   char
-    buffer[MaxTextExtent];
+    buffer[MagickPathExtent];
 
   Image
     *mask_image;
@@ -444,6 +444,9 @@ static MagickBooleanType WritePS3MaskImage(const ImageInfo *image_info,
     start,
     stop;
 
+  MemoryInfo
+    *pixel_info;
+
   register ssize_t
     i;
 
@@ -454,22 +457,26 @@ static MagickBooleanType WritePS3MaskImage(const ImageInfo *image_info,
     *pixels;
 
   assert(image_info != (ImageInfo *) NULL);
-  assert(image_info->signature == MagickSignature);
+  assert(image_info->signature == MagickCoreSignature);
   assert(image != (Image *) NULL);
-  assert(image->signature == MagickSignature);
+  assert(image->signature == MagickCoreSignature);
   if (image->debug != MagickFalse)
     (void) LogMagickEvent(TraceEvent,GetMagickModule(),"%s",image->filename);
-  assert(image->matte != MagickFalse);
+  assert(image->alpha_trait != UndefinedPixelTrait);
   status=MagickTrue;
   /*
     Note BeginData DSC comment for update later.
   */
   start=TellBlob(image);
-  (void) FormatLocaleString(buffer,MaxTextExtent,
+  if (start < 0)
+    ThrowWriterException(CorruptImageError,"ImproperImageHeader");
+  (void) FormatLocaleString(buffer,MagickPathExtent,
     "%%%%BeginData:%13ld %s Bytes\n",0L,compression == NoCompression ?
     "ASCII" : "BINARY");
   (void) WriteBlobString(image,buffer);
   stop=TellBlob(image);
+  if (stop < 0)
+    ThrowWriterException(CorruptImageError,"ImproperImageHeader");
   /*
     Only lossless compressions for the mask.
   */
@@ -478,7 +485,7 @@ static MagickBooleanType WritePS3MaskImage(const ImageInfo *image_info,
     case NoCompression:
     default:
     {
-      (void) FormatLocaleString(buffer,MaxTextExtent,
+      (void) FormatLocaleString(buffer,MagickPathExtent,
         "currentfile %.20g %.20g "PS3_NoCompression" ByteStreamDecodeFilter\n",
         (double) image->columns,(double) image->rows);
       break;
@@ -486,28 +493,28 @@ static MagickBooleanType WritePS3MaskImage(const ImageInfo *image_info,
     case FaxCompression:
     case Group4Compression:
     {
-      (void) FormatLocaleString(buffer,MaxTextExtent,
+      (void) FormatLocaleString(buffer,MagickPathExtent,
         "currentfile %.20g %.20g "PS3_FaxCompression" ByteStreamDecodeFilter\n",
         (double) image->columns,(double) image->rows);
       break;
     }
     case LZWCompression:
     {
-      (void) FormatLocaleString(buffer,MaxTextExtent,
+      (void) FormatLocaleString(buffer,MagickPathExtent,
         "currentfile %.20g %.20g "PS3_LZWCompression" ByteStreamDecodeFilter\n",
         (double) image->columns,(double) image->rows);
       break;
     }
     case RLECompression:
     {
-      (void) FormatLocaleString(buffer,MaxTextExtent,
+      (void) FormatLocaleString(buffer,MagickPathExtent,
         "currentfile %.20g %.20g "PS3_RLECompression" ByteStreamDecodeFilter\n",
         (double) image->columns,(double) image->rows);
       break;
     }
     case ZipCompression:
     {
-      (void) FormatLocaleString(buffer,MaxTextExtent,
+      (void) FormatLocaleString(buffer,MagickPathExtent,
         "currentfile %.20g %.20g "PS3_ZipCompression" ByteStreamDecodeFilter\n",
         (double) image->columns,(double) image->rows);
       break;
@@ -515,18 +522,12 @@ static MagickBooleanType WritePS3MaskImage(const ImageInfo *image_info,
   }
   (void) WriteBlobString(image,buffer);
   (void) WriteBlobString(image,"/ReusableStreamDecode filter\n");
-  mask_image=CloneImage(image,0,0,MagickTrue,&image->exception);
+  mask_image=SeparateImage(image,AlphaChannel,exception);
   if (mask_image == (Image *) NULL)
-    ThrowWriterException(CoderError,image->exception.reason);
-  status=SeparateImageChannel(mask_image,OpacityChannel);
-  if (status == MagickFalse)
-    {
-      mask_image=DestroyImage(mask_image);
-      return(MagickFalse);
-    }
-  (void) SetImageType(mask_image,BilevelType);
-  (void) SetImageType(mask_image,PaletteType);
-  mask_image->matte=MagickFalse;
+    ThrowWriterException(CoderError,exception->reason);
+  (void) SetImageType(mask_image,BilevelType,exception);
+  (void) SetImageType(mask_image,PaletteType,exception);
+  mask_image->alpha_trait=UndefinedPixelTrait;
   pixels=(unsigned char *) NULL;
   length=0;
   switch (compression)
@@ -534,14 +535,16 @@ static MagickBooleanType WritePS3MaskImage(const ImageInfo *image_info,
     case NoCompression:
     default:
     {
-      status=SerializeImageChannel(image_info,mask_image,&pixels,&length);
+      status=SerializeImageChannel(image_info,mask_image,&pixel_info,&length,
+        exception);
       if (status == MagickFalse)
         break;
       Ascii85Initialize(image);
+      pixels=(unsigned char *) GetVirtualMemoryBlob(pixel_info);
       for (i=0; i < (ssize_t) length; i++)
         Ascii85Encode(image,pixels[i]);
       Ascii85Flush(image);
-      pixels=(unsigned char *) RelinquishMagickMemory(pixels);
+      pixel_info=RelinquishVirtualMemory(pixel_info);
       break;
     }
     case FaxCompression:
@@ -549,36 +552,42 @@ static MagickBooleanType WritePS3MaskImage(const ImageInfo *image_info,
     {
       if ((compression == FaxCompression) ||
           (LocaleCompare(CCITTParam,"0") == 0))
-        status=HuffmanEncodeImage(image_info,image,mask_image);
+        status=HuffmanEncodeImage(image_info,image,mask_image,exception);
       else
-        status=Huffman2DEncodeImage(image_info,image,mask_image);
+        status=Huffman2DEncodeImage(image_info,image,mask_image,exception);
       break;
     }
     case LZWCompression:
     {
-      status=SerializeImageChannel(image_info,mask_image,&pixels,&length);
+      status=SerializeImageChannel(image_info,mask_image,&pixel_info,&length,
+        exception);
       if (status == MagickFalse)
         break;
-      status=LZWEncodeImage(image,length,pixels);
-      pixels=(unsigned char *) RelinquishMagickMemory(pixels);
+      pixels=(unsigned char *) GetVirtualMemoryBlob(pixel_info);
+      status=LZWEncodeImage(image,length,pixels,exception);
+      pixel_info=RelinquishVirtualMemory(pixel_info);
       break;
     }
     case RLECompression:
     {
-      status=SerializeImageChannel(image_info,mask_image,&pixels,&length);
+      status=SerializeImageChannel(image_info,mask_image,&pixel_info,&length,
+        exception);
       if (status == MagickFalse)
         break;
-      status=PackbitsEncodeImage(image,length,pixels);
-      pixels=(unsigned char *) RelinquishMagickMemory(pixels);
+      pixels=(unsigned char *) GetVirtualMemoryBlob(pixel_info);
+      status=PackbitsEncodeImage(image,length,pixels,exception);
+      pixel_info=RelinquishVirtualMemory(pixel_info);
       break;
     }
     case ZipCompression:
     {
-      status=SerializeImageChannel(image_info,mask_image,&pixels,&length);
+      status=SerializeImageChannel(image_info,mask_image,&pixel_info,&length,
+        exception);
       if (status == MagickFalse)
         break;
-      status=ZLIBEncodeImage(image,length,pixels);
-      pixels=(unsigned char *) RelinquishMagickMemory(pixels);
+      pixels=(unsigned char *) GetVirtualMemoryBlob(pixel_info);
+      status=ZLIBEncodeImage(image,length,pixels,exception);
+      pixel_info=RelinquishVirtualMemory(pixel_info);
       break;
     }
   }
@@ -586,10 +595,12 @@ static MagickBooleanType WritePS3MaskImage(const ImageInfo *image_info,
   (void) WriteBlobByte(image,'\n');
   length=(size_t) (TellBlob(image)-stop);
   stop=TellBlob(image);
+  if (stop < 0)
+    ThrowWriterException(CorruptImageError,"ImproperImageHeader");
   offset=SeekBlob(image,start,SEEK_SET);
   if (offset < 0)
     ThrowWriterException(CorruptImageError,"ImproperImageHeader");
-  (void) FormatLocaleString(buffer,MaxTextExtent,
+  (void) FormatLocaleString(buffer,MagickPathExtent,
     "%%%%BeginData:%13ld %s Bytes\n",(long) length,
     compression == NoCompression ? "ASCII" : "BINARY");
   (void) WriteBlobString(image,buffer);
@@ -601,10 +612,11 @@ static MagickBooleanType WritePS3MaskImage(const ImageInfo *image_info,
   return(status);
 }
 
-static MagickBooleanType WritePS3Image(const ImageInfo *image_info,Image *image)
+static MagickBooleanType WritePS3Image(const ImageInfo *image_info,Image *image,
+  ExceptionInfo *exception)
 {
   static const char
-    *PostscriptProlog[]=
+    *const PostscriptProlog[]=
     {
       "/ByteStreamDecodeFilter",
       "{",
@@ -738,6 +750,7 @@ static MagickBooleanType WritePS3Image(const ImageInfo *image_info,Image *image)
       "",
       "/DisplayImage",
       "{",
+      "  gsave",
       "  /buffer 512 string def",
       "  % Translation.",
       "  currentfile buffer readline pop",
@@ -750,9 +763,9 @@ static MagickBooleanType WritePS3Image(const ImageInfo *image_info,Image *image)
       "  token pop /y exch def pop",
       "  currentfile buffer readline pop",
       "  token pop /pointsize exch def pop",
-      (char *) NULL
+      (const char *) NULL
     },
-    *PostscriptEpilog[]=
+    *const PostscriptEpilog[]=
     {
       "  x y scale",
       "  % Clipping path.",
@@ -788,23 +801,24 @@ static MagickBooleanType WritePS3Image(const ImageInfo *image_info,Image *image)
       "  { NonMaskedImageDict }",
       "  ifelse",
       "  stencil { 0 setgray imagemask } { image } ifelse",
+      "  grestore",
       "  sp { showpage } if",
       "} bind def",
-      (char *) NULL
+      (const char *) NULL
     };
 
   char
-    buffer[MaxTextExtent],
-    date[MaxTextExtent],
+    buffer[MagickPathExtent],
+    date[MagickPathExtent],
     **labels,
-    page_geometry[MaxTextExtent];
+    page_geometry[MagickPathExtent];
 
   CompressionType
     compression;
 
   const char
     *option,
-    **q,
+    *const *q,
     *value;
 
   double
@@ -824,6 +838,9 @@ static MagickBooleanType WritePS3Image(const ImageInfo *image_info,Image *image)
 
   MagickStatusType
     flags;
+
+  MemoryInfo
+    *pixel_info;
 
   PointInfo
     delta,
@@ -860,12 +877,14 @@ static MagickBooleanType WritePS3Image(const ImageInfo *image_info,Image *image)
     Open output image file.
   */
   assert(image_info != (const ImageInfo *) NULL);
-  assert(image_info->signature == MagickSignature);
+  assert(image_info->signature == MagickCoreSignature);
   assert(image != (Image *) NULL);
-  assert(image->signature == MagickSignature);
+  assert(image->signature == MagickCoreSignature);
   if (image->debug != MagickFalse)
     (void) LogMagickEvent(TraceEvent,GetMagickModule(),"%s",image->filename);
-  status=OpenBlob(image_info,image,WriteBinaryBlobMode,&image->exception);
+  assert(exception != (ExceptionInfo *) NULL);
+  assert(exception->signature == MagickCoreSignature);
+  status=OpenBlob(image_info,image,WriteBinaryBlobMode,exception);
   if (status == MagickFalse)
     return(MagickFalse);
   compression=image->compression;
@@ -876,8 +895,8 @@ static MagickBooleanType WritePS3Image(const ImageInfo *image_info,Image *image)
     case FaxCompression:
     case Group4Compression:
     { 
-      if ((IsMonochromeImage(image,&image->exception) == MagickFalse) ||
-          (image->matte != MagickFalse))
+      if ((SetImageMonochrome(image,exception) == MagickFalse) ||
+          (image->alpha_trait != UndefinedPixelTrait))
         compression=RLECompression;
       break;
     }
@@ -885,7 +904,7 @@ static MagickBooleanType WritePS3Image(const ImageInfo *image_info,Image *image)
     case JPEGCompression:
     {
       compression=RLECompression;
-      (void) ThrowMagickException(&image->exception,GetMagickModule(),
+      (void) ThrowMagickException(exception,GetMagickModule(),
         MissingDelegateError,"DelegateLibrarySupportNotBuiltIn","`%s' (JPEG)",
         image->filename);
       break;
@@ -895,7 +914,7 @@ static MagickBooleanType WritePS3Image(const ImageInfo *image_info,Image *image)
     case ZipCompression:
     {
       compression=RLECompression;
-      (void) ThrowMagickException(&image->exception,GetMagickModule(),
+      (void) ThrowMagickException(exception,GetMagickModule(),
         MissingDelegateError,"DelegateLibrarySupportNotBuiltIn","`%s' (ZLIB)",
         image->filename);
       break;
@@ -914,8 +933,8 @@ static MagickBooleanType WritePS3Image(const ImageInfo *image_info,Image *image)
     */
     delta.x=DefaultResolution;
     delta.y=DefaultResolution;
-    resolution.x=image->x_resolution;
-    resolution.y=image->y_resolution;
+    resolution.x=image->resolution.x;
+    resolution.y=image->resolution.y;
     if ((resolution.x == 0.0) || (resolution.y == 0.0))
       {
         flags=ParseGeometry(PSDensityGeometry,&geometry_info);
@@ -938,20 +957,20 @@ static MagickBooleanType WritePS3Image(const ImageInfo *image_info,Image *image)
         resolution.y=(size_t) (100.0*2.54*resolution.y+0.5)/100.0;
       }
     SetGeometry(image,&geometry);
-    (void) FormatLocaleString(page_geometry,MaxTextExtent,"%.20gx%.20g",
+    (void) FormatLocaleString(page_geometry,MagickPathExtent,"%.20gx%.20g",
       (double) image->columns,(double) image->rows);
     if (image_info->page != (char *) NULL)
-      (void) CopyMagickString(page_geometry,image_info->page,MaxTextExtent);
+      (void) CopyMagickString(page_geometry,image_info->page,MagickPathExtent);
     else
       if ((image->page.width != 0) && (image->page.height != 0))
-        (void) FormatLocaleString(page_geometry,MaxTextExtent,
+        (void) FormatLocaleString(page_geometry,MagickPathExtent,
           "%.20gx%.20g%+.20g%+.20g",(double) image->page.width,(double)
           image->page.height,(double) image->page.x,(double) image->page.y);
       else
         if ((image->gravity != UndefinedGravity) &&
             (LocaleCompare(image_info->magick,"PS") == 0))
-          (void) CopyMagickString(page_geometry,PSPageGeometry,MaxTextExtent);
-    (void) ConcatenateMagickString(page_geometry,">",MaxTextExtent);
+          (void) CopyMagickString(page_geometry,PSPageGeometry,MagickPathExtent);
+    (void) ConcatenateMagickString(page_geometry,">",MagickPathExtent);
     (void) ParseMetaGeometry(page_geometry,&geometry.x,&geometry.y,
       &geometry.width,&geometry.height);
     scale.x=(double) (geometry.width*delta.x)/resolution.x;
@@ -959,8 +978,7 @@ static MagickBooleanType WritePS3Image(const ImageInfo *image_info,Image *image)
     scale.y=(double) (geometry.height*delta.y)/resolution.y;
     geometry.height=(size_t) floor(scale.y+0.5);
     (void) ParseAbsoluteGeometry(page_geometry,&media_info);
-    (void) ParseGravityGeometry(image,page_geometry,&page_info,
-      &image->exception);
+    (void) ParseGravityGeometry(image,page_geometry,&page_info,exception);
     if (image->gravity != UndefinedGravity)
       {
         geometry.x=(-page_info.x);
@@ -970,7 +988,7 @@ static MagickBooleanType WritePS3Image(const ImageInfo *image_info,Image *image)
     if (image_info->pointsize != 0.0)
       pointsize=image_info->pointsize;
     text_size=0;
-    value=GetImageProperty(image,"label");
+    value=GetImageProperty(image,"label",exception);
     if (value != (const char *) NULL)
       text_size=(size_t) (MultilineCensus(value)*pointsize+12);
     page++;
@@ -980,20 +998,20 @@ static MagickBooleanType WritePS3Image(const ImageInfo *image_info,Image *image)
           Postscript header on the first page.
         */
         if (LocaleCompare(image_info->magick,"PS3") == 0)
-          (void) CopyMagickString(buffer,"%!PS-Adobe-3.0\n",MaxTextExtent);
+          (void) CopyMagickString(buffer,"%!PS-Adobe-3.0\n",MagickPathExtent);
         else
           (void) CopyMagickString(buffer,"%!PS-Adobe-3.0 EPSF-3.0\n",
-            MaxTextExtent);
+            MagickPathExtent);
         (void) WriteBlobString(image,buffer);
-        (void) FormatLocaleString(buffer,MaxTextExtent,
+        (void) FormatLocaleString(buffer,MagickPathExtent,
           "%%%%Creator: ImageMagick %s\n",MagickLibVersionText);
         (void) WriteBlobString(image,buffer);
-        (void) FormatLocaleString(buffer,MaxTextExtent,"%%%%Title: %s\n",
+        (void) FormatLocaleString(buffer,MagickPathExtent,"%%%%Title: %s\n",
           image->filename);
         (void) WriteBlobString(image,buffer);
         timer=time((time_t *) NULL);
-        (void) FormatMagickTime(timer,MaxTextExtent,date);
-        (void) FormatLocaleString(buffer,MaxTextExtent,
+        (void) FormatMagickTime(timer,MagickPathExtent,date);
+        (void) FormatLocaleString(buffer,MagickPathExtent,
           "%%%%CreationDate: %s\n",date);
         (void) WriteBlobString(image,buffer);
         bounds.x1=(double) geometry.x;
@@ -1008,11 +1026,11 @@ static MagickBooleanType WritePS3Image(const ImageInfo *image_info,Image *image)
           }
         else
           {
-            (void) FormatLocaleString(buffer,MaxTextExtent,
-              "%%%%BoundingBox: %g %g %g %g\n",floor(bounds.x1+0.5),
-              floor(bounds.y1+0.5),ceil(bounds.x2-0.5),ceil(bounds.y2-0.5));
+            (void) FormatLocaleString(buffer,MagickPathExtent,
+              "%%%%BoundingBox: %g %g %g %g\n",ceil(bounds.x1-0.5),
+              ceil(bounds.y1-0.5),floor(bounds.x2+0.5),floor(bounds.y2+0.5));
             (void) WriteBlobString(image,buffer);
-            (void) FormatLocaleString(buffer,MaxTextExtent,
+            (void) FormatLocaleString(buffer,MagickPathExtent,
               "%%%%HiResBoundingBox: %g %g %g %g\n",bounds.x1,
               bounds.y1,bounds.x2,bounds.y2);
             (void) WriteBlobString(image,buffer);
@@ -1020,14 +1038,14 @@ static MagickBooleanType WritePS3Image(const ImageInfo *image_info,Image *image)
               (void) WriteBlobString(image,
                 "%%DocumentProcessColors: Cyan Magenta Yellow Black\n");
             else
-              if (IsGrayImage(image,&image->exception) != MagickFalse)
+              if (SetImageGray(image,exception) != MagickFalse)
                 (void) WriteBlobString(image,
                   "%%DocumentProcessColors: Black\n");
           }
         /*
           Font resources
         */
-        value=GetImageProperty(image,"label");
+        value=GetImageProperty(image,"label",exception);
         if (value != (const char *) NULL)
           (void) WriteBlobString(image,
             "%%DocumentNeededResources: font Helvetica\n");
@@ -1042,12 +1060,15 @@ static MagickBooleanType WritePS3Image(const ImageInfo *image_info,Image *image)
             (void) WriteBlobString(image,"%%Orientation: Portrait\n");
             (void) WriteBlobString(image,"%%PageOrder: Ascend\n");
             if (image_info->adjoin == MagickFalse)
-              (void) CopyMagickString(buffer,"%%Pages: 1\n",MaxTextExtent);
+              (void) CopyMagickString(buffer,"%%Pages: 1\n",MagickPathExtent);
             else
-              (void) FormatLocaleString(buffer,MaxTextExtent,
+              (void) FormatLocaleString(buffer,MagickPathExtent,
                 "%%%%Pages: %.20g\n",(double) GetImageListLength(image));
             (void) WriteBlobString(image,buffer);
           }
+        if (image->colorspace == CMYKColorspace)
+          (void) WriteBlobString(image,
+            "%%DocumentProcessColors: Cyan Magenta Yellow Black\n");
         (void) WriteBlobString(image,"%%EndComments\n");
         /*
           The static postscript procedures prolog.
@@ -1061,7 +1082,7 @@ static MagickBooleanType WritePS3Image(const ImageInfo *image_info,Image *image)
         /*
           One label line for each line in label string.
         */
-        value=GetImageProperty(image,"label");
+        value=GetImageProperty(image,"label",exception);
         if (value != (const char *) NULL)
           {
               (void) WriteBlobString(image,"\n  %% Labels.\n  /Helvetica "
@@ -1070,7 +1091,7 @@ static MagickBooleanType WritePS3Image(const ImageInfo *image_info,Image *image)
             {
               (void) WriteBlobString(image,
                 "  currentfile buffer readline pop token pop\n");
-              (void) FormatLocaleString(buffer,MaxTextExtent,
+              (void) FormatLocaleString(buffer,MagickPathExtent,
                 "  0 y %g add moveto show pop\n",i*pointsize+12);
               (void) WriteBlobString(image,buffer);
             }
@@ -1085,13 +1106,13 @@ static MagickBooleanType WritePS3Image(const ImageInfo *image_info,Image *image)
         }
         (void)WriteBlobString(image,"%%EndProlog\n");
       }
-    (void) FormatLocaleString(buffer,MaxTextExtent,"%%%%Page: 1 %.20g\n",
+    (void) FormatLocaleString(buffer,MagickPathExtent,"%%%%Page: 1 %.20g\n",
       (double) page);
     (void) WriteBlobString(image,buffer);
     /*
       Page bounding box.
     */
-    (void) FormatLocaleString(buffer,MaxTextExtent,
+    (void) FormatLocaleString(buffer,MagickPathExtent,
       "%%%%PageBoundingBox: %.20g %.20g %.20g %.20g\n",(double) geometry.x,
        (double) geometry.y,geometry.x+(double) geometry.width,geometry.y+
        (double) (geometry.height+text_size));
@@ -1103,7 +1124,7 @@ static MagickBooleanType WritePS3Image(const ImageInfo *image_info,Image *image)
       (void) WriteBlobString(image,
         "%%PageProcessColors: Cyan Magenta Yellow Black\n");
     else
-      if (IsGrayImage(image,&image->exception) != MagickFalse)
+      if (SetImageGray(image,exception) != MagickFalse)
         (void) WriteBlobString(image,"%%PageProcessColors: Black\n");
     /*
       Adjust document bounding box to bound page bounding box.
@@ -1119,21 +1140,21 @@ static MagickBooleanType WritePS3Image(const ImageInfo *image_info,Image *image)
     /*
       Page font resource if there's a label.
     */
-    value=GetImageProperty(image,"label");
+    value=GetImageProperty(image,"label",exception);
     if (value != (const char *) NULL)
       (void) WriteBlobString(image,"%%PageResources: font Helvetica\n");
     /*
       PS clipping path from Photoshop clipping path.
     */
-    if ((image->clip_mask == (Image *) NULL) ||
-        (LocaleNCompare("8BIM:",image->clip_mask->magick_filename,5) != 0))
+    if ((image->read_mask != MagickFalse) ||
+        (LocaleNCompare("8BIM:",image->magick_filename,5) != 0))
       (void) WriteBlobString(image,"/ClipImage {} def\n");
     else
       {
         const char
           *value;
 
-        value=GetImageProperty(image,image->clip_mask->magick_filename);
+        value=GetImageProperty(image,image->magick_filename,exception);
         if (value == (const char *) NULL)
           return(MagickFalse);
         (void) WriteBlobString(image,value);
@@ -1147,8 +1168,8 @@ static MagickBooleanType WritePS3Image(const ImageInfo *image_info,Image *image)
     /*
       Image mask.
     */
-    if ((image->matte != MagickFalse) &&
-        (WritePS3MaskImage(image_info,image,compression) == MagickFalse))
+    if ((image->alpha_trait != UndefinedPixelTrait) &&
+        (WritePS3MaskImage(image_info,image,compression,exception) == MagickFalse))
       {
         (void) CloseBlob(image);
         return(MagickFalse);
@@ -1157,23 +1178,27 @@ static MagickBooleanType WritePS3Image(const ImageInfo *image_info,Image *image)
       Remember position of BeginData comment so we can update it.
     */
     start=TellBlob(image);
-    (void) FormatLocaleString(buffer,MaxTextExtent,
+    if (start < 0)
+      ThrowWriterException(CorruptImageError,"ImproperImageHeader");
+    (void) FormatLocaleString(buffer,MagickPathExtent,
       "%%%%BeginData:%13ld %s Bytes\n",0L,
       compression == NoCompression ? "ASCII" : "BINARY");
     (void) WriteBlobString(image,buffer);
     stop=TellBlob(image);
+    if (stop < 0)
+      ThrowWriterException(CorruptImageError,"ImproperImageHeader");
     (void) WriteBlobString(image,"DisplayImage\n");
     /*
       Translate, scale, and font point size.
     */
-    (void) FormatLocaleString(buffer,MaxTextExtent,"%.20g %.20g\n%g %g\n%g\n",
+    (void) FormatLocaleString(buffer,MagickPathExtent,"%.20g %.20g\n%g %g\n%g\n",
       (double) geometry.x,(double) geometry.y,scale.x,scale.y,pointsize);
     (void) WriteBlobString(image,buffer);
     /*
       Output labels.
     */
     labels=(char **) NULL;
-    value=GetImageProperty(image,"label");
+    value=GetImageProperty(image,"label",exception);
     if (value != (const char *) NULL)
       labels=StringToList(value);
     if (labels != (char **) NULL)
@@ -1201,8 +1226,8 @@ static MagickBooleanType WritePS3Image(const ImageInfo *image_info,Image *image)
     /*
       Photoshop clipping path active?
     */
-    if ((image->clip_mask != (Image *) NULL) &&
-        (LocaleNCompare("8BIM:",image->clip_mask->magick_filename,5) == 0))
+    if ((image->read_mask != MagickFalse) &&
+        (LocaleNCompare("8BIM:",image->magick_filename,5) == 0))
         (void) WriteBlobString(image,"true\n");
       else
         (void) WriteBlobString(image,"false\n");
@@ -1214,21 +1239,21 @@ static MagickBooleanType WritePS3Image(const ImageInfo *image_info,Image *image)
     /*
       Image columns, rows, and color space.
     */
-    (void) FormatLocaleString(buffer,MaxTextExtent,"%.20g %.20g\n%s\n",
+    (void) FormatLocaleString(buffer,MagickPathExtent,"%.20g %.20g\n%s\n",
       (double) image->columns,(double) image->rows,image->colorspace ==
       CMYKColorspace ? PS3_CMYKColorspace : PS3_RGBColorspace);
     (void) WriteBlobString(image,buffer);
     /*
       Masked image?
     */
-    (void) WriteBlobString(image,image->matte != MagickFalse ?
+    (void) WriteBlobString(image,image->alpha_trait != UndefinedPixelTrait ?
       "true\n" : "false\n");
     /*
       Render with imagemask operator?
     */
     option=GetImageOption(image_info,"ps3:imagemask");
     (void) WriteBlobString(image,((option != (const char *) NULL) &&
-      (IsMonochromeImage(image,&image->exception) != MagickFalse)) ?
+      (SetImageMonochrome(image,exception) != MagickFalse)) ?
       "true\n" : "false\n");
     /*
       Output pixel data.
@@ -1236,12 +1261,12 @@ static MagickBooleanType WritePS3Image(const ImageInfo *image_info,Image *image)
     pixels=(unsigned char *) NULL;
     length=0;
     if ((image_info->type != TrueColorType) &&
-        (image_info->type != TrueColorMatteType) &&
+        (image_info->type != TrueColorAlphaType) &&
         (image_info->type != ColorSeparationType) &&
-        (image_info->type != ColorSeparationMatteType) &&
+        (image_info->type != ColorSeparationAlphaType) &&
         (image->colorspace != CMYKColorspace) &&
-        ((IsGrayImage(image,&image->exception) != MagickFalse) ||
-         (IsMonochromeImage(image,&image->exception) != MagickFalse)))
+        ((SetImageGray(image,exception) != MagickFalse) ||
+         (SetImageMonochrome(image,exception) != MagickFalse)))
       {
         /*
           Gray images.
@@ -1289,32 +1314,33 @@ static MagickBooleanType WritePS3Image(const ImageInfo *image_info,Image *image)
         /*
           1 bit or 8 bit components?
         */
-        (void) FormatLocaleString(buffer,MaxTextExtent,"%d\n",
-          IsMonochromeImage(image,&image->exception) != MagickFalse ? 1 : 8);
+        (void) FormatLocaleString(buffer,MagickPathExtent,"%d\n",
+          SetImageMonochrome(image,exception) != MagickFalse ? 1 : 8);
         (void) WriteBlobString(image,buffer);
         /*
           Image data.
         */
         if (compression == JPEGCompression)
-          status=InjectImageBlob(image_info,image,image,"jpeg",
-            &image->exception);
+          status=InjectImageBlob(image_info,image,image,"jpeg",exception);
         else
           if ((compression == FaxCompression) ||
               (compression == Group4Compression))
             {
               if (LocaleCompare(CCITTParam,"0") == 0)
-                status=HuffmanEncodeImage(image_info,image,image);
+                status=HuffmanEncodeImage(image_info,image,image,exception);
               else
-                status=Huffman2DEncodeImage(image_info,image,image);
+                status=Huffman2DEncodeImage(image_info,image,image,exception);
             }
           else
             {
-              status=SerializeImageChannel(image_info,image,&pixels,&length);
+              status=SerializeImageChannel(image_info,image,&pixel_info,&length,
+                exception);
               if (status == MagickFalse)
                 {
                   (void) CloseBlob(image);
                   return(MagickFalse);
                 }
+              pixels=(unsigned char *) GetVirtualMemoryBlob(pixel_info);
               switch (compression)
               {
                 case NoCompression:
@@ -1329,21 +1355,21 @@ static MagickBooleanType WritePS3Image(const ImageInfo *image_info,Image *image)
                 }
                 case LZWCompression:
                 {
-                  status=LZWEncodeImage(image,length,pixels);
+                  status=LZWEncodeImage(image,length,pixels,exception);
                   break;
                 }
                 case RLECompression:
                 {
-                  status=PackbitsEncodeImage(image,length,pixels);
+                  status=PackbitsEncodeImage(image,length,pixels,exception);
                   break;
                 }
                 case ZipCompression:
                 {
-                  status=ZLIBEncodeImage(image,length,pixels);
+                  status=ZLIBEncodeImage(image,length,pixels,exception);
                   break;
                 }
               }
-              pixels=(unsigned char *) RelinquishMagickMemory(pixels);
+              pixel_info=RelinquishVirtualMemory(pixel_info);
             }
       }
     else
@@ -1387,19 +1413,20 @@ static MagickBooleanType WritePS3Image(const ImageInfo *image_info,Image *image)
             Image data.
           */
           if (compression == JPEGCompression)
-            status=InjectImageBlob(image_info,image,image,"jpeg",
-              &image->exception);
+            status=InjectImageBlob(image_info,image,image,"jpeg",exception);
           else
             {
               /*
                 Stream based compressions.
               */
-              status=SerializeImage(image_info,image,&pixels,&length);
+              status=SerializeImage(image_info,image,&pixel_info,&length,
+                exception);
               if (status == MagickFalse)
                 {
                   (void) CloseBlob(image);
                   return(MagickFalse);
                 }
+              pixels=(unsigned char *) GetVirtualMemoryBlob(pixel_info);
               switch (compression)
               {
                 case NoCompression:
@@ -1414,21 +1441,21 @@ static MagickBooleanType WritePS3Image(const ImageInfo *image_info,Image *image)
                 }
                 case RLECompression:
                 {
-                  status=PackbitsEncodeImage(image,length,pixels);
+                  status=PackbitsEncodeImage(image,length,pixels,exception);
                   break;
                 }
                 case LZWCompression:
                 {
-                  status=LZWEncodeImage(image,length,pixels);
+                  status=LZWEncodeImage(image,length,pixels,exception);
                   break;
                 }
                 case ZipCompression:
                 {
-                  status=ZLIBEncodeImage(image,length,pixels);
+                  status=ZLIBEncodeImage(image,length,pixels,exception);
                   break;
                 }
               }
-              pixels=(unsigned char *) RelinquishMagickMemory(pixels);
+              pixel_info=RelinquishVirtualMemory(pixel_info);
             }
           }
         else
@@ -1443,11 +1470,6 @@ static MagickBooleanType WritePS3Image(const ImageInfo *image_info,Image *image)
               default:
               {
                 (void) WriteBlobString(image,PS3_NoCompression"\n");
-                break;
-              }
-              case JPEGCompression:
-              {
-                (void) WriteBlobString(image,PS3_JPEGCompression"\n");
                 break;
               }
               case RLECompression:
@@ -1469,7 +1491,7 @@ static MagickBooleanType WritePS3Image(const ImageInfo *image_info,Image *image)
             /*
               Number of colors in color map.
             */
-            (void) FormatLocaleString(buffer,MaxTextExtent,"%.20g\n",
+            (void) FormatLocaleString(buffer,MagickPathExtent,"%.20g\n",
               (double) image->colors);
             (void) WriteBlobString(image,buffer);
             /*
@@ -1502,12 +1524,14 @@ static MagickBooleanType WritePS3Image(const ImageInfo *image_info,Image *image)
                 }
                 Ascii85Flush(image);
               }
-            status=SerializeImageIndexes(image_info,image,&pixels,&length);
+            status=SerializeImageIndexes(image_info,image,&pixel_info,&length,
+              exception);
             if (status == MagickFalse)
               {
                 (void) CloseBlob(image);
                 return(MagickFalse);
               }
+            pixels=(unsigned char *) GetVirtualMemoryBlob(pixel_info);
             switch (compression)
             {
               case NoCompression:
@@ -1520,29 +1544,23 @@ static MagickBooleanType WritePS3Image(const ImageInfo *image_info,Image *image)
                 status=MagickTrue;
                 break;
               }
-              case JPEGCompression:
-              {
-                status=InjectImageBlob(image_info,image,image,"jpeg",
-                  &image->exception);
-                break;
-              }
               case RLECompression:
               {
-                status=PackbitsEncodeImage(image,length,pixels);
+                status=PackbitsEncodeImage(image,length,pixels,exception);
                 break;
               }
               case LZWCompression:
               {
-                status=LZWEncodeImage(image,length,pixels);
+                status=LZWEncodeImage(image,length,pixels,exception);
                 break;
               }
               case ZipCompression:
               {
-                status=ZLIBEncodeImage(image,length,pixels);
+                status=ZLIBEncodeImage(image,length,pixels,exception);
                 break;
               }
             }
-            pixels=(unsigned char *) RelinquishMagickMemory(pixels);
+            pixel_info=RelinquishVirtualMemory(pixel_info);
           }
     (void) WriteBlobByte(image,'\n');
     if (status == MagickFalse)
@@ -1555,10 +1573,12 @@ static MagickBooleanType WritePS3Image(const ImageInfo *image_info,Image *image)
     */
     length=(size_t) (TellBlob(image)-stop);
     stop=TellBlob(image);
+    if (stop < 0)
+      ThrowWriterException(CorruptImageError,"ImproperImageHeader");
     offset=SeekBlob(image,start,SEEK_SET);
     if (offset < 0)
       ThrowWriterException(CorruptImageError,"ImproperImageHeader");
-    (void) FormatLocaleString(buffer,MaxTextExtent,
+    (void) FormatLocaleString(buffer,MagickPathExtent,
       "%%%%BeginData:%13ld %s Bytes\n",(long) length,
       compression == NoCompression ? "ASCII" : "BINARY");
     (void) WriteBlobString(image,buffer);
@@ -1581,13 +1601,13 @@ static MagickBooleanType WritePS3Image(const ImageInfo *image_info,Image *image)
   (void) WriteBlobString(image,"%%Trailer\n");
   if (page > 1)
     {
-      (void) FormatLocaleString(buffer,MaxTextExtent,
-        "%%%%BoundingBox: %g %g %g %g\n",floor(bounds.x1+0.5),
-        floor(bounds.y1+0.5),ceil(bounds.x2-0.5),ceil(bounds.y2-0.5));
+      (void) FormatLocaleString(buffer,MagickPathExtent,
+        "%%%%BoundingBox: %g %g %g %g\n",ceil(bounds.x1-0.5),
+        ceil(bounds.y1-0.5),floor(bounds.x2+0.5),floor(bounds.y2+0.5));
       (void) WriteBlobString(image,buffer);
-      (void) FormatLocaleString(buffer,MaxTextExtent,
-        "%%%%HiResBoundingBox: %g %g %g %g\n",bounds.x1,bounds.y1,
-        bounds.x2,bounds.y2);
+      (void) FormatLocaleString(buffer,MagickPathExtent,
+        "%%%%HiResBoundingBox: %g %g %g %g\n",bounds.x1,bounds.y1,bounds.x2,
+        bounds.y2);
       (void) WriteBlobString(image,buffer);
     }
   (void) WriteBlobString(image,"%%EOF\n");

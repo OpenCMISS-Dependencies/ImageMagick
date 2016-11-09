@@ -1,5 +1,5 @@
 #!/usr/bin/perl
-#  Copyright 1999-2011 ImageMagick Studio LLC, a non-profit organization
+#  Copyright 1999-2016 ImageMagick Studio LLC, a non-profit organization
 #  dedicated to making software imaging solutions freely available.
 #
 #  You may not use this file except in compliance with the License.  You may
@@ -45,20 +45,20 @@ testReadCompare('input.dib', 'reference/read/input_dib.miff', q//, 0.0, 0.0);
 
 print("Flexible Image Transport System ...\n");
 ++$test;
-testReadCompare('input.fits', 'reference/read/input_fits.miff', q//, 0.0, 0.0);
+testReadCompare('input.fits', 'reference/read/input_fits.miff', q//, 0.06, 0.6);
 
 print("CompuServe graphics interchange format ...\n");
 ++$test;
-testReadCompare('input.gif', 'reference/read/input_gif.miff', q//, 0.02, 1.02);
+testReadCompare('input.gif', 'reference/read/input_gif.miff', q//, 0.0, 0.0);
 
 print("CompuServe graphics interchange format (1987) ...\n");
 ++$test;
-testReadCompare('input.gif87', 'reference/read/input_gif87.miff', q//, 0.02, 1.02);
+testReadCompare('input.gif87', 'reference/read/input_gif87.miff', q//, 0.0, 0.0);
 
 print("Gradient (gradual passing from one shade to another) ...\n");
 ++$test;
 testReadCompare('gradient:red-blue', 'reference/read/gradient.miff',
-  q/size=>"70x46"/, 0.2, 1.02);
+  q/size=>"70x46"/, 0.03, 0.3);
 
 print("GRANITE (granite texture) ...\n");
 ++$test;
@@ -66,19 +66,19 @@ testReadCompare('granite:', 'reference/read/granite.miff', q/size=>"70x46"/, 0.0
 
 print("MAT (MatLab gray 8-bit LSB integer) ...\n");
 ++$test;
-testReadCompare('input_gray_lsb_08bit.mat', 'reference/read/input_gray_lsb_08bit_mat.miff', q//, 0.2, 1.02);
+testReadCompare('input_gray_lsb_08bit.mat', 'reference/read/input_gray_lsb_08bit_mat.miff', q//, 0.3, 1.03);
 
 print("MAT (MatLab gray 8-bit MSB integer) ...\n");
 ++$test;
-testReadCompare('input_gray_msb_08bit.mat', 'reference/read/input_gray_msb_08bit_mat.miff', q//, 0.0, 0.0);
+testReadCompare('input_gray_msb_08bit.mat', 'reference/read/input_gray_msb_08bit_mat.miff', q//, 0.22, 1.022);
 
 print("MAT (MatLab gray 64-bit LSB double) ...\n");
 ++$test;
-testReadCompare('input_gray_lsb_double.mat', 'reference/read/input_gray_lsb_double_mat.miff', q//, 0.2, 1.02);
+testReadCompare('input_gray_lsb_double.mat', 'reference/read/input_gray_lsb_double_mat.miff', q//, 0.22, 1.022);
 
 print("MAT (MatLab RGB 8-bit LSB integer) ...\n");
 ++$test;
-testReadCompare('input_rgb_lsb_08bit.mat', 'reference/read/input_rgb_lsb_08bit_mat.miff', q//, 0.2, 1.02);
+testReadCompare('input_rgb_lsb_08bit.mat', 'reference/read/input_rgb_lsb_08bit_mat.miff', q//, 0.0, 0.0);
 
 print("Microsoft icon ...\n");
 ++$test;
@@ -118,11 +118,11 @@ testReadCompare('input.pcx', 'reference/read/input_pcx.miff', q//, 0.0, 0.0);
 
 print("Portable graymap format (gray scale), ASCII format ...\n");
 ++$test;
-testReadCompare('input_p2.pgm', 'reference/read/input_pgm_p2.miff', q//, 0.0, 0.0);
+testReadCompare('input_p2.pgm', 'reference/read/input_pgm_p2.miff', q//, 0.06, 0.6);
 
 print("Portable graymap format (gray scale), binary format ...\n");
 ++$test;
-testReadCompare('input_p5.pgm', 'reference/read/input_pgm_p5.miff', q//, 0.0, 0.0);
+testReadCompare('input_p5.pgm', 'reference/read/input_pgm_p5.miff', q//, 0.06, 0.6);
 
 print("Apple Macintosh QuickDraw/PICT file ...\n");
 ++$test;
@@ -146,7 +146,7 @@ testReadCompare('input.psd', 'reference/read/input_psd.miff', q//, 0.0, 0.0);
 
 print("Irix RGB image file ...\n");
 ++$test;
-testReadCompare('input.sgi', 'reference/read/input_sgi.miff', q//, 0.25, 1.1);
+testReadCompare('input.sgi', 'reference/read/input_sgi.miff', q//, 0.0, 0.0);
 
 print("SUN 1-bit Rasterfile ...\n");
 ++$test;
@@ -219,4 +219,4 @@ testReadCompare('rgba:input_70x46.rgba', 'reference/read/input_rgba.miff',
 print("UYVY format ...\n");
 ++$test;
 testReadCompare('uyvy:input_70x46.uyvy', 'reference/read/input_uyvy.miff',
-                q/size=>"70x46", depth=>8/, 0.2, 1.02);
+                q/size=>"70x46", depth=>8/, 0.0, 0.0);

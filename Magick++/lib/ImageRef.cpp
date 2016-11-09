@@ -1,6 +1,7 @@
 // This may look like C code, but it is really -*- C++ -*-
 //
 // Copyright Bob Friesenhahn, 1999, 2000, 2001, 2002
+// Copyright Dirk Lemstra 2014-2015
 //
 // Implementation of ImageRef
 //
@@ -14,91 +15,141 @@
 #include "Magick++/Exception.h"
 #include "Magick++/Options.h"
 
-// Construct with an image and default options
-Magick::ImageRef::ImageRef ( MagickCore::Image * image_ )
-  : _image(image_),
-    _options(new Options),
-    _id(-1),
-    _refCount(1),
-    _mutexLock()
-{
-}
-
-// Construct with an image and options
-// Inserts Image* in image, but copies Options into image.
-Magick::ImageRef::ImageRef ( MagickCore::Image * image_,
-			     const Options * options_ )
-  : _image(image_),
-    _options(0),
-    _id(-1),
-    _refCount(1),
-    _mutexLock()
-{
-  _options = new Options( *options_ );
-}
-
-// Default constructor
-Magick::ImageRef::ImageRef ( void )
+Magick::ImageRef::ImageRef(void)
   : _image(0),
+    _mutexLock(),
     _options(new Options),
-    _id(-1),
-    _refCount(1),
-    _mutexLock()
+    _refCount(1)
 {
-  // Allocate default image
-  _image = AcquireImage( _options->imageInfo() );
-
-  // Test for error and throw exception (like throwImageException())
-  throwException(_image->exception);
+  GetPPException;
+  _image=AcquireImage(_options->imageInfo(),exceptionInfo);
+  ThrowPPException(false);
 }
 
-// Destructor
-Magick::ImageRef::~ImageRef( void )
+Magick::ImageRef::ImageRef(MagickCore::Image *image_)
+  : _image(image_),
+    _mutexLock(),
+    _options(new Options),
+    _refCount(1)
 {
-  // Unregister image (if still registered)
-  if( _id > -1 )
-    {
-      char id[MaxTextExtent];
-      sprintf(id,"%.20g",(double) _id);
-      DeleteImageRegistry( id );
-      _id=-1;
-    }
+}
 
+Magick::ImageRef::~ImageRef(void)
+{
   // Deallocate image
-  if ( _image )
-    {
-      DestroyImageList( _image );
-      _image = 0;
-    }
+  if (_image != (MagickCore::Image*) NULL)
+    _image=DestroyImageList(_image);
 
   // Deallocate image options
   delete _options;
-  _options = 0;
+  _options=(Options *) NULL;
 }
 
-// Assign image to reference
-void Magick::ImageRef::image ( MagickCore::Image * image_ )
+size_t Magick::ImageRef::decrease()
 {
-  if(_image)
-    DestroyImageList( _image );
-  _image = image_;
+  size_t
+    count;
+
+  _mutexLock.lock();
+  if (_refCount == 0)
+    {
+      _mutexLock.unlock();
+      throwExceptionExplicit(MagickCore::OptionError,
+        "Invalid call to decrease");
+      return(0);
+    }
+  count=--_refCount;
+  _mutexLock.unlock();
+  return(count);
 }
 
-// Assign options to reference
-void  Magick::ImageRef::options ( Magick::Options * options_ )
+MagickCore::Image *&Magick::ImageRef::image(void)
+{
+  return(_image);
+}
+
+void Magick::ImageRef::increase()
+{
+  _mutexLock.lock();
+  _refCount++;
+  _mutexLock.unlock();
+}
+
+bool Magick::ImageRef::isShared()
+{
+  bool
+    isShared;
+
+  _mutexLock.lock();
+  isShared=(_refCount > 1);
+  _mutexLock.unlock();
+  return(isShared);
+}
+
+void  Magick::ImageRef::options(Magick::Options *options_)
 {
   delete _options;
-  _options = options_;
+  _options=options_;
 }
 
-// Assign registration id to reference
-void Magick::ImageRef::id ( const ssize_t id_ )
+Magick::Options *Magick::ImageRef::options(void)
 {
-  if( _id > -1 )
+  return(_options);
+}
+
+Magick::ImageRef *Magick::ImageRef::replaceImage(ImageRef *imgRef,
+  MagickCore::Image *replacement_)
+{
+  Magick::ImageRef
+    *instance;
+
+  imgRef->_mutexLock.lock();
+  if (imgRef->_refCount == 1)
     {
-      char id[MaxTextExtent];
-      sprintf(id,"%.20g",(double) _id);
-      DeleteImageRegistry( id );
+      // We can replace the image if we own it.
+      instance=imgRef;
+      if (imgRef->_image != (MagickCore::Image*) NULL)
+        (void) DestroyImageList(imgRef->_image);
+      imgRef->_image=replacement_;
+      imgRef->_mutexLock.unlock();
     }
-  _id = id_;
+  else
+    {
+      // We don't own the image, create a new ImageRef instance.
+      instance=new ImageRef(replacement_,imgRef->_options);
+      imgRef->_refCount--;
+      imgRef->_mutexLock.unlock();
+    }
+  return(instance);
+}
+
+std::string Magick::ImageRef::signature(const bool force_)
+{
+  const char
+    *property;
+
+  // Re-calculate image signature if necessary
+  GetPPException;
+  _mutexLock.lock();
+  property=(const char *) NULL;
+  if (!force_ && (_image->taint == MagickFalse))
+    property=GetImageProperty(_image,"Signature",exceptionInfo);
+  if (property == (const char *) NULL)
+    {
+      (void) SignatureImage(_image,exceptionInfo);
+      property=GetImageProperty(_image,"Signature",exceptionInfo);
+    }
+  _mutexLock.unlock();
+  ThrowPPException(true);
+
+  return(std::string(property));
+}
+
+Magick::ImageRef::ImageRef(MagickCore::Image *image_,const Options *options_)
+  : _image(image_),
+    _mutexLock(),
+    _options(0),
+    _refCount(1)
+{
+  _options=new Options(*options_);
 }

@@ -13,11 +13,11 @@
 %                   Create Identity Hald CLUT Image Format                    %
 %                                                                             %
 %                              Software Design                                %
-%                                John Cristy                                  %
+%                                   Cristy                                    %
 %                                 July 1992                                   %
 %                                                                             %
 %                                                                             %
-%  Copyright 1999-2011 ImageMagick Studio LLC, a non-profit organization      %
+%  Copyright 1999-2016 ImageMagick Studio LLC, a non-profit organization      %
 %  dedicated to making software imaging solutions freely available.           %
 %                                                                             %
 %  You may not use this file except in compliance with the License.  You may  %
@@ -39,25 +39,28 @@
 /*
   Include declarations.
 */
-#include "magick/studio.h"
-#include "magick/blob.h"
-#include "magick/blob-private.h"
-#include "magick/cache.h"
-#include "magick/colorspace.h"
-#include "magick/exception.h"
-#include "magick/exception-private.h"
-#include "magick/image.h"
-#include "magick/image-private.h"
-#include "magick/list.h"
-#include "magick/magick.h"
-#include "magick/memory_.h"
-#include "magick/module.h"
-#include "magick/monitor.h"
-#include "magick/monitor-private.h"
-#include "magick/quantum-private.h"
-#include "magick/static.h"
-#include "magick/string_.h"
-#include "magick/string-private.h"
+#include "MagickCore/studio.h"
+#include "MagickCore/blob.h"
+#include "MagickCore/blob-private.h"
+#include "MagickCore/cache.h"
+#include "MagickCore/colorspace.h"
+#include "MagickCore/exception.h"
+#include "MagickCore/exception-private.h"
+#include "MagickCore/image.h"
+#include "MagickCore/image-private.h"
+#include "MagickCore/list.h"
+#include "MagickCore/magick.h"
+#include "MagickCore/memory_.h"
+#include "MagickCore/module.h"
+#include "MagickCore/monitor.h"
+#include "MagickCore/monitor-private.h"
+#include "MagickCore/pixel-accessor.h"
+#include "MagickCore/quantum-private.h"
+#include "MagickCore/resource_.h"
+#include "MagickCore/static.h"
+#include "MagickCore/string_.h"
+#include "MagickCore/string-private.h"
+#include "MagickCore/thread-private.h"
 
 /*
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -106,13 +109,13 @@ static Image *ReadHALDImage(const ImageInfo *image_info,
     Create HALD color lookup table image.
   */
   assert(image_info != (const ImageInfo *) NULL);
-  assert(image_info->signature == MagickSignature);
+  assert(image_info->signature == MagickCoreSignature);
   if (image_info->debug != MagickFalse)
     (void) LogMagickEvent(TraceEvent,GetMagickModule(),"%s",
       image_info->filename);
   assert(exception != (ExceptionInfo *) NULL);
-  assert(exception->signature == MagickSignature);
-  image=AcquireImage(image_info);
+  assert(exception->signature == MagickCoreSignature);
+  image=AcquireImage(image_info,exception);
   level=0;
   if (*image_info->filename != '\0')
     level=StringToUnsignedLong(image_info->filename);
@@ -122,6 +125,9 @@ static Image *ReadHALDImage(const ImageInfo *image_info,
   cube_size=level*level;
   image->columns=(size_t) (level*cube_size);
   image->rows=(size_t) (level*cube_size);
+  status=SetImageExtent(image,image->columns,image->rows,exception);
+  if (status == MagickFalse)
+    return(DestroyImageList(image));
   for (y=0; y < (ssize_t) image->rows; y+=(ssize_t) level)
   {
     ssize_t
@@ -129,14 +135,13 @@ static Image *ReadHALDImage(const ImageInfo *image_info,
       green,
       red;
 
-    register PixelPacket
-      *restrict q;
+    register Quantum
+      *magick_restrict q;
 
     if (status == MagickFalse)
       continue;
-    q=QueueAuthenticPixels(image,0,y,image->columns,(size_t) level,
-      exception);
-    if (q == (PixelPacket *) NULL)
+    q=QueueAuthenticPixels(image,0,y,image->columns,(size_t) level,exception);
+    if (q == (Quantum *) NULL)
       {
         status=MagickFalse;
         continue;
@@ -146,14 +151,12 @@ static Image *ReadHALDImage(const ImageInfo *image_info,
     {
       for (red=0; red < (ssize_t) cube_size; red++)
       {
-        SetRedPixelComponent(q,ClampToQuantum(QuantumRange*red/
-          (cube_size-1.0)));
-        SetGreenPixelComponent(q,ClampToQuantum(QuantumRange*green/
-          (cube_size-1.0)));
-        SetBluePixelComponent(q,ClampToQuantum(QuantumRange*blue/
-          (cube_size-1.0)));
-        SetOpacityPixelComponent(q,OpaqueOpacity);
-        q++;
+        SetPixelRed(image,ClampToQuantum(QuantumRange*red/(cube_size-1.0)),q);
+        SetPixelGreen(image,ClampToQuantum(QuantumRange*green/(cube_size-1.0)),
+          q);
+        SetPixelBlue(image,ClampToQuantum(QuantumRange*blue/(cube_size-1.0)),q);
+        SetPixelAlpha(image,OpaqueAlpha,q);
+        q+=GetPixelChannels(image);
       }
     }
     if (SyncAuthenticPixels(image,exception) == MagickFalse)
@@ -190,13 +193,13 @@ ModuleExport size_t RegisterHALDImage(void)
   MagickInfo
     *entry;
 
-  entry=SetMagickInfo("HALD");
+  entry=AcquireMagickInfo("HALD","HALD",
+    "Identity Hald color lookup table image");
   entry->decoder=(DecodeImageHandler *) ReadHALDImage;
-  entry->adjoin=MagickFalse;
+  entry->flags^=CoderAdjoinFlag;
   entry->format_type=ImplicitFormatType;
-  entry->raw=MagickTrue;
-  entry->endian_support=MagickTrue;
-  entry->description=ConstantString("Identity Hald color lookup table image");
+  entry->flags|=CoderRawSupportFlag;
+  entry->flags|=CoderEndianSupportFlag;
   (void) RegisterMagickInfo(entry);
   return(MagickImageCoderSignature);
 }

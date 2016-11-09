@@ -13,11 +13,11 @@
 %                    Read/Write VICAR Rasterfile Format                       %
 %                                                                             %
 %                              Software Design                                %
-%                                John Cristy                                  %
+%                                   Cristy                                    %
 %                                 July 1992                                   %
 %                                                                             %
 %                                                                             %
-%  Copyright 1999-2011 ImageMagick Studio LLC, a non-profit organization      %
+%  Copyright 1999-2016 ImageMagick Studio LLC, a non-profit organization      %
 %  dedicated to making software imaging solutions freely available.           %
 %                                                                             %
 %  You may not use this file except in compliance with the License.  You may  %
@@ -39,34 +39,36 @@
 /*
   Include declarations.
 */
-#include "magick/studio.h"
-#include "magick/blob.h"
-#include "magick/blob-private.h"
-#include "magick/cache.h"
-#include "magick/colormap.h"
-#include "magick/colorspace.h"
-#include "magick/constitute.h"
-#include "magick/exception.h"
-#include "magick/exception-private.h"
-#include "magick/image.h"
-#include "magick/image-private.h"
-#include "magick/list.h"
-#include "magick/magick.h"
-#include "magick/memory_.h"
-#include "magick/module.h"
-#include "magick/monitor.h"
-#include "magick/monitor-private.h"
-#include "magick/quantum-private.h"
-#include "magick/quantum-private.h"
-#include "magick/static.h"
-#include "magick/string_.h"
-#include "magick/string-private.h"
+#include "MagickCore/studio.h"
+#include "MagickCore/attribute.h"
+#include "MagickCore/blob.h"
+#include "MagickCore/blob-private.h"
+#include "MagickCore/cache.h"
+#include "MagickCore/colormap.h"
+#include "MagickCore/colorspace.h"
+#include "MagickCore/colorspace-private.h"
+#include "MagickCore/constitute.h"
+#include "MagickCore/exception.h"
+#include "MagickCore/exception-private.h"
+#include "MagickCore/image.h"
+#include "MagickCore/image-private.h"
+#include "MagickCore/list.h"
+#include "MagickCore/magick.h"
+#include "MagickCore/memory_.h"
+#include "MagickCore/module.h"
+#include "MagickCore/monitor.h"
+#include "MagickCore/monitor-private.h"
+#include "MagickCore/quantum-private.h"
+#include "MagickCore/quantum-private.h"
+#include "MagickCore/static.h"
+#include "MagickCore/string_.h"
+#include "MagickCore/string-private.h"
 
 /*
   Forward declarations.
 */
 static MagickBooleanType
-  WriteVICARImage(const ImageInfo *,Image *);
+  WriteVICARImage(const ImageInfo *,Image *,ExceptionInfo *);
 
 /*
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -144,8 +146,11 @@ static Image *ReadVICARImage(const ImageInfo *image_info,
   ExceptionInfo *exception)
 {
   char
-    keyword[MaxTextExtent],
-    value[MaxTextExtent];
+    keyword[MagickPathExtent],
+    value[MagickPathExtent];
+
+  const unsigned char
+    *pixels;
 
   Image
     *image;
@@ -163,7 +168,7 @@ static Image *ReadVICARImage(const ImageInfo *image_info,
   QuantumType
     quantum_type;
 
-  register PixelPacket
+  register Quantum
     *q;
 
   size_t
@@ -173,20 +178,17 @@ static Image *ReadVICARImage(const ImageInfo *image_info,
     count,
     y;
 
-  unsigned char
-    *pixels;
-
   /*
     Open image file.
   */
   assert(image_info != (const ImageInfo *) NULL);
-  assert(image_info->signature == MagickSignature);
+  assert(image_info->signature == MagickCoreSignature);
   if (image_info->debug != MagickFalse)
     (void) LogMagickEvent(TraceEvent,GetMagickModule(),"%s",
       image_info->filename);
   assert(exception != (ExceptionInfo *) NULL);
-  assert(exception->signature == MagickSignature);
-  image=AcquireImage(image_info);
+  assert(exception->signature == MagickCoreSignature);
+  image=AcquireImage(image_info,exception);
   status=OpenBlob(image_info,image,ReadBinaryBlobMode,exception);
   if (status == MagickFalse)
     {
@@ -224,7 +226,7 @@ static Image *ReadVICARImage(const ImageInfo *image_info,
         p=keyword;
         do
         {
-          if ((size_t) (p-keyword) < (MaxTextExtent-1))
+          if ((size_t) (p-keyword) < (MagickPathExtent-1))
             *p++=c;
           c=ReadBlobByte(image);
           count++;
@@ -243,7 +245,7 @@ static Image *ReadVICARImage(const ImageInfo *image_info,
         p=value;
         while (isalnum(c))
         {
-          if ((size_t) (p-value) < (MaxTextExtent-1))
+          if ((size_t) (p-value) < (MagickPathExtent-1))
             *p++=c;
           c=ReadBlobByte(image);
           count++;
@@ -274,33 +276,39 @@ static Image *ReadVICARImage(const ImageInfo *image_info,
   while (count < (ssize_t) length)
   {
     c=ReadBlobByte(image);
+    if (c == EOF)
+      break;
     count++;
   }
   if ((image->columns == 0) || (image->rows == 0))
     ThrowReaderException(CorruptImageError,"NegativeOrZeroImageSize");
   image->depth=8;
-  if (AcquireImageColormap(image,256) == MagickFalse)
-    ThrowReaderException(ResourceLimitError,"MemoryAllocationFailed");
   if (image_info->ping != MagickFalse)
     {
       (void) CloseBlob(image);
       return(GetFirstImageInList(image));
     }
+  status=SetImageExtent(image,image->columns,image->rows,exception);
+  if (status == MagickFalse)
+    return(DestroyImageList(image));
   /*
     Read VICAR pixels.
   */
-  quantum_type=IndexQuantum;
+  (void) SetImageColorspace(image,GRAYColorspace,exception);
+  quantum_type=GrayQuantum;
   quantum_info=AcquireQuantumInfo(image_info,image);
   if (quantum_info == (QuantumInfo *) NULL)
     ThrowReaderException(ResourceLimitError,"MemoryAllocationFailed");
-  pixels=GetQuantumPixels(quantum_info);
-  length=GetQuantumExtent(image,quantum_info,IndexQuantum);
+  length=GetQuantumExtent(image,quantum_info,quantum_type);
   for (y=0; y < (ssize_t) image->rows; y++)
   {
     q=QueueAuthenticPixels(image,0,y,image->columns,1,exception);
-    if (q == (PixelPacket *) NULL)
+    if (q == (Quantum *) NULL)
       break;
-    count=ReadBlob(image,length,pixels);
+    pixels=(const unsigned char *) ReadBlobStream(image,length,
+      GetQuantumPixels(quantum_info),&count);
+    if (count != (ssize_t) length)
+      break;
     (void) ImportQuantumPixels(image,(CacheView *) NULL,quantum_info,
       quantum_type,pixels,exception);
     if (SyncAuthenticPixels(image,exception) == MagickFalse)
@@ -347,13 +355,11 @@ ModuleExport size_t RegisterVICARImage(void)
   MagickInfo
     *entry;
 
-  entry=SetMagickInfo("VICAR");
+  entry=AcquireMagickInfo("VICAR","VICAR","VICAR rasterfile format");
   entry->decoder=(DecodeImageHandler *) ReadVICARImage;
   entry->encoder=(EncodeImageHandler *) WriteVICARImage;
   entry->magick=(IsImageFormatHandler *) IsVICAR;
-  entry->adjoin=MagickFalse;
-  entry->description=ConstantString("VICAR rasterfile format");
-  entry->module=ConstantString("VICAR");
+  entry->flags^=CoderAdjoinFlag;
   (void) RegisterMagickInfo(entry);
   return(MagickImageCoderSignature);
 }
@@ -404,7 +410,7 @@ ModuleExport void UnregisterVICARImage(void)
 %  The format of the WriteVICARImage method is:
 %
 %      MagickBooleanType WriteVICARImage(const ImageInfo *image_info,
-%        Image *image)
+%        Image *image,ExceptionInfo *exception)
 %
 %  A description of each parameter follows.
 %
@@ -412,12 +418,14 @@ ModuleExport void UnregisterVICARImage(void)
 %
 %    o image:  The image.
 %
+%    o exception: return any errors or warnings in this structure.
+%
 */
 static MagickBooleanType WriteVICARImage(const ImageInfo *image_info,
-  Image *image)
+  Image *image,ExceptionInfo *exception)
 {
   char
-    header[MaxTextExtent];
+    header[MagickPathExtent];
 
   int
     y;
@@ -428,7 +436,7 @@ static MagickBooleanType WriteVICARImage(const ImageInfo *image_info,
   QuantumInfo
     *quantum_info;
 
-  register const PixelPacket
+  register const Quantum
     *p;
 
   size_t
@@ -444,26 +452,27 @@ static MagickBooleanType WriteVICARImage(const ImageInfo *image_info,
     Open output image file.
   */
   assert(image_info != (const ImageInfo *) NULL);
-  assert(image_info->signature == MagickSignature);
+  assert(image_info->signature == MagickCoreSignature);
   assert(image != (Image *) NULL);
-  assert(image->signature == MagickSignature);
+  assert(image->signature == MagickCoreSignature);
   if (image->debug != MagickFalse)
     (void) LogMagickEvent(TraceEvent,GetMagickModule(),"%s",image->filename);
-  status=OpenBlob(image_info,image,WriteBinaryBlobMode,&image->exception);
+  assert(exception != (ExceptionInfo *) NULL);
+  assert(exception->signature == MagickCoreSignature);
+  status=OpenBlob(image_info,image,WriteBinaryBlobMode,exception);
   if (status == MagickFalse)
     return(status);
-  if (image->colorspace != RGBColorspace)
-    (void) TransformImageColorspace(image,RGBColorspace);
+  (void) TransformImageColorspace(image,sRGBColorspace,exception);
   /*
     Write header.
   */
-  (void) ResetMagickMemory(header,' ',MaxTextExtent);
-  (void) FormatLocaleString(header,MaxTextExtent,
+  (void) ResetMagickMemory(header,' ',MagickPathExtent);
+  (void) FormatLocaleString(header,MagickPathExtent,
     "LBLSIZE=%.20g FORMAT='BYTE' TYPE='IMAGE' BUFSIZE=20000 DIM=2 EOL=0 "
     "RECSIZE=%.20g ORG='BSQ' NL=%.20g NS=%.20g NB=1 N1=0 N2=0 N3=0 N4=0 NBB=0 "
-    "NLB=0 TASK='ImageMagick'",(double) MaxTextExtent,(double) image->columns,
+    "NLB=0 TASK='ImageMagick'",(double) MagickPathExtent,(double) image->columns,
     (double) image->rows,(double) image->columns);
-  (void) WriteBlob(image,MaxTextExtent,(unsigned char *) header);
+  (void) WriteBlob(image,MagickPathExtent,(unsigned char *) header);
   /*
     Write VICAR pixels.
   */
@@ -471,14 +480,14 @@ static MagickBooleanType WriteVICARImage(const ImageInfo *image_info,
   quantum_info=AcquireQuantumInfo(image_info,image);
   if (quantum_info == (QuantumInfo *) NULL)
     ThrowWriterException(ResourceLimitError,"MemoryAllocationFailed");
-  pixels=GetQuantumPixels(quantum_info);
+  pixels=(unsigned char *) GetQuantumPixels(quantum_info);
   for (y=0; y < (ssize_t) image->rows; y++)
   {
-    p=GetVirtualPixels(image,0,y,image->columns,1,&image->exception);
-    if (p == (const PixelPacket *) NULL)
+    p=GetVirtualPixels(image,0,y,image->columns,1,exception);
+    if (p == (const Quantum *) NULL)
       break;
-    length=ExportQuantumPixels(image,(const CacheView *) NULL,quantum_info,
-      GrayQuantum,pixels,&image->exception);
+    length=ExportQuantumPixels(image,(CacheView *) NULL,quantum_info,
+      GrayQuantum,pixels,exception);
     count=WriteBlob(image,length,pixels);
     if (count != (ssize_t) length)
       break;

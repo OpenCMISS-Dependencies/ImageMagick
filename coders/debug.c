@@ -13,11 +13,11 @@
 %                      Image Pixel Values for Debugging.                      %
 %                                                                             %
 %                              Software Design                                %
-%                                John Cristy                                  %
+%                                   Cristy                                    %
 %                                 July 1992                                   %
 %                                                                             %
 %                                                                             %
-%  Copyright 1999-2011 ImageMagick Studio LLC, a non-profit organization      %
+%  Copyright 1999-2016 ImageMagick Studio LLC, a non-profit organization      %
 %  dedicated to making software imaging solutions freely available.           %
 %                                                                             %
 %  You may not use this file except in compliance with the License.  You may  %
@@ -39,40 +39,40 @@
 /*
   Include declarations.
 */
-#include "magick/studio.h"
-#include "magick/annotate.h"
-#include "magick/attribute.h"
-#include "magick/blob.h"
-#include "magick/blob-private.h"
-#include "magick/cache.h"
-#include "magick/color.h"
-#include "magick/color-private.h"
-#include "magick/colorspace.h"
-#include "magick/constitute.h"
-#include "magick/draw.h"
-#include "magick/exception.h"
-#include "magick/exception-private.h"
-#include "magick/geometry.h"
-#include "magick/image.h"
-#include "magick/image-private.h"
-#include "magick/list.h"
-#include "magick/magick.h"
-#include "magick/memory_.h"
-#include "magick/monitor.h"
-#include "magick/monitor-private.h"
-#include "magick/option.h"
-#include "magick/pixel-private.h"
-#include "magick/quantum-private.h"
-#include "magick/static.h"
-#include "magick/statistic.h"
-#include "magick/string_.h"
-#include "magick/module.h"
+#include "MagickCore/studio.h"
+#include "MagickCore/annotate.h"
+#include "MagickCore/attribute.h"
+#include "MagickCore/blob.h"
+#include "MagickCore/blob-private.h"
+#include "MagickCore/cache.h"
+#include "MagickCore/color.h"
+#include "MagickCore/color-private.h"
+#include "MagickCore/colorspace.h"
+#include "MagickCore/constitute.h"
+#include "MagickCore/draw.h"
+#include "MagickCore/exception.h"
+#include "MagickCore/exception-private.h"
+#include "MagickCore/geometry.h"
+#include "MagickCore/image.h"
+#include "MagickCore/image-private.h"
+#include "MagickCore/list.h"
+#include "MagickCore/magick.h"
+#include "MagickCore/memory_.h"
+#include "MagickCore/monitor.h"
+#include "MagickCore/monitor-private.h"
+#include "MagickCore/option.h"
+#include "MagickCore/pixel-accessor.h"
+#include "MagickCore/quantum-private.h"
+#include "MagickCore/static.h"
+#include "MagickCore/statistic.h"
+#include "MagickCore/string_.h"
+#include "MagickCore/module.h"
 
 /*
   Forward declarations.
 */
 static MagickBooleanType
-  WriteDEBUGImage(const ImageInfo *,Image *);
+  WriteDEBUGImage(const ImageInfo *,Image *,ExceptionInfo *);
 
 /*
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -102,12 +102,10 @@ ModuleExport size_t RegisterDEBUGImage(void)
   MagickInfo
     *entry;
 
-  entry=SetMagickInfo("DEBUG");
+  entry=AcquireMagickInfo("DEBUG","DEBUG","Image pixel values for debugging");
   entry->encoder=(EncodeImageHandler *) WriteDEBUGImage;
-  entry->raw=MagickTrue;
-  entry->stealth=MagickTrue;
-  entry->description=ConstantString("Image pixel values for debugging");
-  entry->module=ConstantString("DEBUG");
+  entry->flags|=CoderRawSupportFlag;
+  entry->flags|=CoderStealthFlag;
   (void) RegisterMagickInfo(entry);
   return(MagickImageCoderSignature);
 }
@@ -152,7 +150,7 @@ ModuleExport void UnregisterDEBUGImage(void)
 %  The format of the WriteDEBUGImage method is:
 %
 %      MagickBooleanType WriteDEBUGImage(const ImageInfo *image_info,
-%        Image *image)
+%        Image *image,ExceptionInfo *exception)
 %
 %  A description of each parameter follows.
 %
@@ -160,14 +158,16 @@ ModuleExport void UnregisterDEBUGImage(void)
 %
 %    o image:  The image.
 %
+%    o exception: return any errors or warnings in this structure.
+%
 */
 static MagickBooleanType WriteDEBUGImage(const ImageInfo *image_info,
-  Image *image)
+  Image *image,ExceptionInfo *exception)
 {
   char
-    buffer[MaxTextExtent],
-    colorspace[MaxTextExtent],
-    tuple[MaxTextExtent];
+    buffer[MagickPathExtent],
+    colorspace[MagickPathExtent],
+    tuple[MagickPathExtent];
 
   ssize_t
     y;
@@ -178,13 +178,10 @@ static MagickBooleanType WriteDEBUGImage(const ImageInfo *image_info,
   MagickOffsetType
     scene;
 
-  MagickPixelPacket
+  PixelInfo
     pixel;
 
-  register const IndexPacket
-    *indexes;
-
-  register const PixelPacket
+  register const Quantum
     *p;
 
   register ssize_t
@@ -194,64 +191,63 @@ static MagickBooleanType WriteDEBUGImage(const ImageInfo *image_info,
     Open output image file.
   */
   assert(image_info != (const ImageInfo *) NULL);
-  assert(image_info->signature == MagickSignature);
+  assert(image_info->signature == MagickCoreSignature);
   assert(image != (Image *) NULL);
-  assert(image->signature == MagickSignature);
+  assert(image->signature == MagickCoreSignature);
   if (image->debug != MagickFalse)
     (void) LogMagickEvent(TraceEvent,GetMagickModule(),"%s",image->filename);
-  status=OpenBlob(image_info,image,WriteBlobMode,&image->exception);
+  status=OpenBlob(image_info,image,WriteBlobMode,exception);
   if (status == MagickFalse)
     return(status);
   scene=0;
   do
   {
     (void) CopyMagickString(colorspace,CommandOptionToMnemonic(
-      MagickColorspaceOptions,(ssize_t) image->colorspace),MaxTextExtent);
+      MagickColorspaceOptions,(ssize_t) image->colorspace),MagickPathExtent);
     LocaleLower(colorspace);
     image->depth=GetImageQuantumDepth(image,MagickTrue);
-    if (image->matte != MagickFalse)
-      (void) ConcatenateMagickString(colorspace,"a",MaxTextExtent);
-    (void) FormatLocaleString(buffer,MaxTextExtent,
+    if (image->alpha_trait != UndefinedPixelTrait)
+      (void) ConcatenateMagickString(colorspace,"a",MagickPathExtent);
+    (void) FormatLocaleString(buffer,MagickPathExtent,
       "# ImageMagick pixel debugging: %.20g,%.20g,%.20g,%s\n",(double)
-      image->columns,(double) image->rows,(double)
-      GetQuantumRange(image->depth),colorspace);
+      image->columns,(double) image->rows,(double) ((MagickOffsetType)
+      GetQuantumRange(image->depth)),colorspace);
     (void) WriteBlobString(image,buffer);
-    GetMagickPixelPacket(image,&pixel);
+    GetPixelInfo(image,&pixel);
     for (y=0; y < (ssize_t) image->rows; y++)
     {
-      p=GetVirtualPixels(image,0,y,image->columns,1,&image->exception);
-      if (p == (const PixelPacket *) NULL)
+      p=GetVirtualPixels(image,0,y,image->columns,1,exception);
+      if (p == (const Quantum *) NULL)
         break;
-      indexes=GetVirtualIndexQueue(image);
       for (x=0; x < (ssize_t) image->columns; x++)
       {
-        (void) FormatLocaleString(buffer,MaxTextExtent,"%.20g,%.20g: ",(double)
+        (void) FormatLocaleString(buffer,MagickPathExtent,"%.20g,%.20g: ",(double)
           x,(double) y);
         (void) WriteBlobString(image,buffer);
-        SetMagickPixelPacket(image,p,indexes+x,&pixel);
-        (void) FormatLocaleString(tuple,MaxTextExtent,"%.20g,%.20g,%.20g ",
+        GetPixelInfoPixel(image,p,&pixel);
+        (void) FormatLocaleString(tuple,MagickPathExtent,"%.20g,%.20g,%.20g ",
           (double) pixel.red,(double) pixel.green,(double) pixel.blue);
         if (pixel.colorspace == CMYKColorspace)
           {
             char
-              black[MaxTextExtent];
+              black[MagickPathExtent];
 
-            (void) FormatLocaleString(black,MaxTextExtent,",%.20g ",
-              (double) pixel.index);
-            (void) ConcatenateMagickString(tuple,black,MaxTextExtent);
+            (void) FormatLocaleString(black,MagickPathExtent,",%.20g ",
+              (double) pixel.black);
+            (void) ConcatenateMagickString(tuple,black,MagickPathExtent);
           }
-        if (pixel.matte != MagickFalse)
+        if (pixel.alpha_trait != UndefinedPixelTrait)
           {
             char
-              alpha[MaxTextExtent];
+              alpha[MagickPathExtent];
 
-            (void) FormatLocaleString(alpha,MaxTextExtent,",%.20g ",
-              (double) (QuantumRange-pixel.opacity));
-            (void) ConcatenateMagickString(tuple,alpha,MaxTextExtent);
+            (void) FormatLocaleString(alpha,MagickPathExtent,",%.20g ",
+              (double) pixel.alpha);
+            (void) ConcatenateMagickString(tuple,alpha,MagickPathExtent);
           }
         (void) WriteBlobString(image,tuple);
         (void) WriteBlobString(image,"\n");
-        p++;
+        p+=GetPixelChannels(image);
       }
       status=SetImageProgress(image,SaveImageTag,(MagickOffsetType) y,
         image->rows);

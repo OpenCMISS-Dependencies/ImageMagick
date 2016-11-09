@@ -13,11 +13,11 @@
 %                  Read/Write X Windows system Pixmap Format                  %
 %                                                                             %
 %                              Software Design                                %
-%                                John Cristy                                  %
+%                                   Cristy                                    %
 %                                 July 1992                                   %
 %                                                                             %
 %                                                                             %
-%  Copyright 1999-2011 ImageMagick Studio LLC, a non-profit organization      %
+%  Copyright 1999-2016 ImageMagick Studio LLC, a non-profit organization      %
 %  dedicated to making software imaging solutions freely available.           %
 %                                                                             %
 %  You may not use this file except in compliance with the License.  You may  %
@@ -39,42 +39,44 @@
 /*
   Include declarations.
 */
-#include "magick/studio.h"
-#include "magick/blob.h"
-#include "magick/blob-private.h"
-#include "magick/cache.h"
-#include "magick/color.h"
-#include "magick/color-private.h"
-#include "magick/colormap.h"
-#include "magick/colorspace.h"
-#include "magick/exception.h"
-#include "magick/exception-private.h"
-#include "magick/geometry.h"
-#include "magick/image.h"
-#include "magick/image-private.h"
-#include "magick/list.h"
-#include "magick/magick.h"
-#include "magick/memory_.h"
-#include "magick/monitor.h"
-#include "magick/monitor-private.h"
-#include "magick/pixel-private.h"
-#include "magick/quantize.h"
-#include "magick/quantum-private.h"
-#include "magick/resize.h"
-#include "magick/resource_.h"
-#include "magick/splay-tree.h"
-#include "magick/static.h"
-#include "magick/string_.h"
-#include "magick/module.h"
-#include "magick/threshold.h"
-#include "magick/utility.h"
+#include "MagickCore/studio.h"
+#include "MagickCore/attribute.h"
+#include "MagickCore/blob.h"
+#include "MagickCore/blob-private.h"
+#include "MagickCore/cache.h"
+#include "MagickCore/color.h"
+#include "MagickCore/color-private.h"
+#include "MagickCore/colormap.h"
+#include "MagickCore/colorspace.h"
+#include "MagickCore/colorspace-private.h"
+#include "MagickCore/exception.h"
+#include "MagickCore/exception-private.h"
+#include "MagickCore/geometry.h"
+#include "MagickCore/image.h"
+#include "MagickCore/image-private.h"
+#include "MagickCore/list.h"
+#include "MagickCore/magick.h"
+#include "MagickCore/memory_.h"
+#include "MagickCore/monitor.h"
+#include "MagickCore/monitor-private.h"
+#include "MagickCore/pixel-accessor.h"
+#include "MagickCore/quantize.h"
+#include "MagickCore/quantum-private.h"
+#include "MagickCore/resize.h"
+#include "MagickCore/resource_.h"
+#include "MagickCore/splay-tree.h"
+#include "MagickCore/static.h"
+#include "MagickCore/string_.h"
+#include "MagickCore/module.h"
+#include "MagickCore/threshold.h"
+#include "MagickCore/utility.h"
 
 /*
   Forward declarations.
 */
 static MagickBooleanType
-  WritePICONImage(const ImageInfo *,Image *),
-  WriteXPMImage(const ImageInfo *,Image *);
+  WritePICONImage(const ImageInfo *,Image *,ExceptionInfo *),
+  WriteXPMImage(const ImageInfo *,Image *,ExceptionInfo *);
 
 /*
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -149,31 +151,29 @@ static int CompareXPMColor(const void *target,const void *source)
   return(strcmp(p,q));
 }
 
-static char *CopyXPMColor(char *destination,const char *source,size_t length)
+static ssize_t CopyXPMColor(char *destination,const char *source,size_t length)
 {
-  while (length-- && (*source != '\0'))
-    *destination++=(*source++);
-  *destination='\0';
-  return(destination-length);
+  register const char
+    *p;
+
+  p=source;
+  while (length-- && (*p != '\0'))
+    *destination++=(*p++);
+  if (length != 0)
+    *destination='\0';
+  return((ssize_t) (p-source));
 }
 
 static char *NextXPMLine(char *p)
 {
-  assert(p != (char*)NULL);
+  assert(p != (char *) NULL);
   p=strchr(p,'\n');
   if (p != (char *) NULL)
     p++;
   return(p);
 }
 
-static inline size_t MagickMin(const size_t x,const size_t y)
-{
-  if (x < y)
-    return(x);
-  return(y);
-}
-
-static char *ParseXPMColor(char *color)
+static char *ParseXPMColor(char *color,MagickBooleanType search_start)
 {
 #define NumberTargets  6
 
@@ -188,38 +188,57 @@ static char *ParseXPMColor(char *color)
     i;
 
   static const char
-    *targets[NumberTargets] = { "c ", "g ", "g4 ", "m ", "b ", "s " };
+    *const targets[NumberTargets] = { "c ", "g ", "g4 ", "m ", "b ", "s " };
 
-  for (i=0; i < NumberTargets; i++)
-  {
-    p=color;
-    for (q=targets[i]; *p != '\0'; p++)
+  if (search_start != MagickFalse)
     {
-      if (*p == '\n')
-        break;
-      if (*p != *q)
-        continue;
-      if (isspace((int) ((unsigned char) (*(p-1)))) == 0)
-        continue;
-      r=p;
-      for ( ; ; )
+      for (i=0; i < NumberTargets; i++)
       {
-        if (*q == '\0')
-          return(p);
-        if (*r++ != *q++)
-          break;
+        p=color;
+        for (q=targets[i]; *p != '\0'; p++)
+        {
+          if (*p == '\n')
+            break;
+          if (*p != *q)
+            continue;
+          if (isspace((int) ((unsigned char) (*(p-1)))) == 0)
+            continue;
+          r=p;
+          for ( ; ; )
+          {
+            if (*q == '\0')
+              return(p);
+            if (*r++ != *q++)
+              break;
+          }
+          q=targets[i];
+        }
       }
-      q=targets[i];
+      return((char *) NULL);
+    }
+  for (p=color+1; *p != '\0'; p++)
+  {
+    if (*p == '\n')
+      break;
+    if (isspace((int) ((unsigned char) (*(p-1)))) == 0)
+      continue;
+    if (isspace((int) ((unsigned char) (*p))) != 0)
+      continue;
+    for (i=0; i < NumberTargets; i++)
+    {
+      if ((*p == *targets[i]) && (*(p+1) == *(targets[i]+1)))
+        return(p);
     }
   }
-  return((char *) NULL);
+  return(p);
 }
 
 static Image *ReadXPMImage(const ImageInfo *image_info,ExceptionInfo *exception)
 {
   char
-    key[MaxTextExtent],
-    target[MaxTextExtent],
+    *grey,
+    key[MagickPathExtent],
+    target[MagickPathExtent],
     *xpm_buffer;
 
   Image
@@ -230,17 +249,14 @@ static Image *ReadXPMImage(const ImageInfo *image_info,ExceptionInfo *exception)
     status;
 
   register char
+    *next,
     *p,
-    *q,
-    *next;
-
-  register IndexPacket
-    *indexes;
+    *q;
 
   register ssize_t
     x;
 
-  register PixelPacket
+  register Quantum
     *r;
 
   size_t
@@ -264,13 +280,13 @@ static Image *ReadXPMImage(const ImageInfo *image_info,ExceptionInfo *exception)
     Open image file.
   */
   assert(image_info != (const ImageInfo *) NULL);
-  assert(image_info->signature == MagickSignature);
+  assert(image_info->signature == MagickCoreSignature);
   if (image_info->debug != MagickFalse)
     (void) LogMagickEvent(TraceEvent,GetMagickModule(),"%s",
       image_info->filename);
   assert(exception != (ExceptionInfo *) NULL);
-  assert(exception->signature == MagickSignature);
-  image=AcquireImage(image_info);
+  assert(exception->signature == MagickCoreSignature);
+  image=AcquireImage(image_info,exception);
   status=OpenBlob(image_info,image,ReadBinaryBlobMode,exception);
   if (status == MagickFalse)
     {
@@ -280,32 +296,35 @@ static Image *ReadXPMImage(const ImageInfo *image_info,ExceptionInfo *exception)
   /*
     Read XPM file.
   */
-  length=MaxTextExtent;
+  length=MagickPathExtent;
   xpm_buffer=(char *) AcquireQuantumMemory((size_t) length,sizeof(*xpm_buffer));
+  if (xpm_buffer == (char *) NULL)
+    ThrowReaderException(ResourceLimitError,"MemoryAllocationFailed");
+  *xpm_buffer='\0';
   p=xpm_buffer;
-  if (xpm_buffer != (char *) NULL)
-    while (ReadBlobString(image,p) != (char *) NULL)
-    {
-      if ((*p == '#') && ((p == xpm_buffer) || (*(p-1) == '\n')))
-        continue;
-      if ((*p == '}') && (*(p+1) == ';'))
-        break;
-      p+=strlen(p);
-      if ((size_t) (p-xpm_buffer+MaxTextExtent) < length)
-        continue;
-      length<<=1;
-      xpm_buffer=(char *) ResizeQuantumMemory(xpm_buffer,length+MaxTextExtent,
-        sizeof(*xpm_buffer));
-      if (xpm_buffer == (char *) NULL)
-        break;
-      p=xpm_buffer+strlen(xpm_buffer);
-    }
+  while (ReadBlobString(image,p) != (char *) NULL)
+  {
+    if ((*p == '#') && ((p == xpm_buffer) || (*(p-1) == '\n')))
+      continue;
+    if ((*p == '}') && (*(p+1) == ';'))
+      break;
+    p+=strlen(p);
+    if ((size_t) (p-xpm_buffer+MagickPathExtent) < length)
+      continue;
+    length<<=1;
+    xpm_buffer=(char *) ResizeQuantumMemory(xpm_buffer,length+MagickPathExtent,
+      sizeof(*xpm_buffer));
+    if (xpm_buffer == (char *) NULL)
+      break;
+    p=xpm_buffer+strlen(xpm_buffer);
+  }
   if (xpm_buffer == (char *) NULL)
     ThrowReaderException(ResourceLimitError,"MemoryAllocationFailed");
   /*
     Remove comments.
   */
   count=0;
+  width=0;
   for (p=xpm_buffer; *p != '\0'; p++)
   {
     if (*p != '"')
@@ -317,16 +336,18 @@ static Image *ReadXPMImage(const ImageInfo *image_info,ExceptionInfo *exception)
     if (count == 4)
       break;
   }
-  if ((count != 4) || (width > 10) || (image->columns == 0) ||
-      (image->rows == 0) || (image->colors == 0))
-    ThrowReaderException(CorruptImageError,"ImproperImageHeader");
-  image->depth=16;
+  if ((count != 4) || (width == 0) || (width > 3) ||
+      (image->columns == 0) || (image->rows == 0) ||
+      (image->colors == 0) || (image->colors > MaxColormapSize))
+    {
+      xpm_buffer=DestroyString(xpm_buffer);
+      ThrowReaderException(CorruptImageError,"ImproperImageHeader");
+    }
   /*
     Remove unquoted characters.
   */
   active=MagickFalse;
-  q=xpm_buffer;
-  while (*p != '\0')
+  for (q=xpm_buffer; *p != '\0'; )
   {
     if (*p++ == '"')
       {
@@ -343,83 +364,109 @@ static Image *ReadXPMImage(const ImageInfo *image_info,ExceptionInfo *exception)
   */
   xpm_colors=NewSplayTree(CompareXPMColor,RelinquishMagickMemory,
     (void *(*)(void *)) NULL);
-  if (AcquireImageColormap(image,image->colors) == MagickFalse)
-    ThrowReaderException(ResourceLimitError,"MemoryAllocationFailed");
+  if (AcquireImageColormap(image,image->colors,exception) == MagickFalse)
+    {
+      xpm_buffer=DestroyString(xpm_buffer);
+      ThrowReaderException(ResourceLimitError,"MemoryAllocationFailed");
+    }
   /*
     Read image colormap.
   */
+  image->depth=1;
   next=NextXPMLine(xpm_buffer);
-  for (j=0; (j < (ssize_t) image->colors) && (next != (char*) NULL); j++)
+  for (j=0; (j < (ssize_t) image->colors) && (next != (char *) NULL); j++)
   {
     p=next;
     next=NextXPMLine(p);
-    (void) CopyXPMColor(key,p,MagickMin((size_t) width,MaxTextExtent));
+    (void) CopyXPMColor(key,p,MagickMin((size_t) width,MagickPathExtent-1));
     status=AddValueToSplayTree(xpm_colors,ConstantString(key),(void *) j);
     /*
       Parse color.
     */
-    (void) CopyMagickString(target,"gray",MaxTextExtent);
-    q=ParseXPMColor(p+width);
+    (void) CopyMagickString(target,"gray",MagickPathExtent);
+    q=ParseXPMColor(p+width,MagickTrue);
     if (q != (char *) NULL)
       {
         while ((isspace((int) ((unsigned char) *q)) == 0) && (*q != '\0'))
           q++;
+        if ((next-q) < 0)
+          break;
         if (next != (char *) NULL)
           (void) CopyXPMColor(target,q,MagickMin((size_t) (next-q),
-            MaxTextExtent));
+            MagickPathExtent-1));
         else
-          (void) CopyMagickString(target,q,MaxTextExtent);
-        q=ParseXPMColor(target);
+          (void) CopyMagickString(target,q,MagickPathExtent);
+        q=ParseXPMColor(target,MagickFalse);
         if (q != (char *) NULL)
           *q='\0';
       }
     StripString(target);
+    grey=strstr(target,"grey");
+    if (grey != (char *) NULL)
+      grey[2]='a';
     if (LocaleCompare(target,"none") == 0)
       {
         image->storage_class=DirectClass;
-        image->matte=MagickTrue;
+        image->alpha_trait=BlendPixelTrait;
       }
-    status=QueryColorCompliance(target,AllCompliance,&image->colormap[j],
+    status=QueryColorCompliance(target,XPMCompliance,&image->colormap[j],
       exception);
     if (status == MagickFalse)
       break;
+    if (image->depth < image->colormap[j].depth)
+      image->depth=image->colormap[j].depth;
   }
   if (j < (ssize_t) image->colors)
-    ThrowReaderException(CorruptImageError,"CorruptImage");
+    {
+      xpm_colors=DestroySplayTree(xpm_colors);
+      xpm_buffer=DestroyString(xpm_buffer);
+      ThrowReaderException(CorruptImageError,"CorruptImage");
+    }
   j=0;
   if (image_info->ping == MagickFalse)
     {
       /*
         Read image pixels.
       */
+      status=SetImageExtent(image,image->columns,image->rows,exception);
+      if (status == MagickFalse)
+        return(DestroyImageList(image));
       for (y=0; y < (ssize_t) image->rows; y++)
       {
         p=NextXPMLine(p);
         if (p == (char *) NULL)
           break;
         r=QueueAuthenticPixels(image,0,y,image->columns,1,exception);
-        if (r == (PixelPacket *) NULL)
+        if (r == (Quantum *) NULL)
           break;
-        indexes=GetAuthenticIndexQueue(image);
         for (x=0; x < (ssize_t) image->columns; x++)
         {
-          (void) CopyXPMColor(key,p,(size_t) width);
+          ssize_t count=CopyXPMColor(key,p,MagickMin(width,MagickPathExtent-1));
+          if (count != (ssize_t) width)
+            break;
           j=(ssize_t) GetValueFromSplayTree(xpm_colors,key);
           if (image->storage_class == PseudoClass)
-            SetIndexPixelComponent(indexes+x,j);
-          *r=image->colormap[j];
-          r++;
-          p+=width;
+            SetPixelIndex(image,(Quantum) j,r);
+          SetPixelViaPixelInfo(image,image->colormap+j,r);
+          p+=count;
+          r+=GetPixelChannels(image);
         }
+        if (x < (ssize_t) image->columns)
+          break;
         if (SyncAuthenticPixels(image,exception) == MagickFalse)
           break;
       }
       if (y < (ssize_t) image->rows)
-        ThrowReaderException(CorruptImageError,"NotEnoughPixelData");
+        {
+          xpm_colors=DestroySplayTree(xpm_colors);
+          xpm_buffer=DestroyString(xpm_buffer);
+          ThrowReaderException(CorruptImageError,"NotEnoughPixelData");
+        }
     }
   /*
     Relinquish resources.
   */
+  xpm_buffer=DestroyString(xpm_buffer);
   xpm_colors=DestroySplayTree(xpm_colors);
   (void) CloseBlob(image);
   return(GetFirstImageInList(image));
@@ -453,28 +500,22 @@ ModuleExport size_t RegisterXPMImage(void)
   MagickInfo
     *entry;
 
-  entry=SetMagickInfo("PICON");
+  entry=AcquireMagickInfo("XPM","PICON","Personal Icon");
   entry->decoder=(DecodeImageHandler *) ReadXPMImage;
   entry->encoder=(EncodeImageHandler *) WritePICONImage;
-  entry->adjoin=MagickFalse;
-  entry->description=ConstantString("Personal Icon");
-  entry->module=ConstantString("XPM");
+  entry->flags^=CoderAdjoinFlag;
   (void) RegisterMagickInfo(entry);
-  entry=SetMagickInfo("PM");
+  entry=AcquireMagickInfo("XPM","PM","X Windows system pixmap (color)");
   entry->decoder=(DecodeImageHandler *) ReadXPMImage;
   entry->encoder=(EncodeImageHandler *) WriteXPMImage;
-  entry->adjoin=MagickFalse;
-  entry->stealth=MagickTrue;
-  entry->description=ConstantString("X Windows system pixmap (color)");
-  entry->module=ConstantString("XPM");
+  entry->flags^=CoderAdjoinFlag;
+  entry->flags|=CoderStealthFlag;
   (void) RegisterMagickInfo(entry);
-  entry=SetMagickInfo("XPM");
+  entry=AcquireMagickInfo("XPM","XPM","X Windows system pixmap (color)");
   entry->decoder=(DecodeImageHandler *) ReadXPMImage;
   entry->encoder=(EncodeImageHandler *) WriteXPMImage;
   entry->magick=(IsImageFormatHandler *) IsXPM;
-  entry->adjoin=MagickFalse;
-  entry->description=ConstantString("X Windows system pixmap (color)");
-  entry->module=ConstantString("XPM");
+  entry->flags^=CoderAdjoinFlag;
   (void) RegisterMagickInfo(entry);
   return(MagickImageCoderSignature);
 }
@@ -521,7 +562,7 @@ ModuleExport void UnregisterXPMImage(void)
 %  The format of the WritePICONImage method is:
 %
 %      MagickBooleanType WritePICONImage(const ImageInfo *image_info,
-%        Image *image)
+%        Image *image,ExceptionInfo *exception)
 %
 %  A description of each parameter follows.
 %
@@ -529,9 +570,11 @@ ModuleExport void UnregisterXPMImage(void)
 %
 %    o image:  The image.
 %
+%    o exception: return any errors or warnings in this structure.
+%
 */
 static MagickBooleanType WritePICONImage(const ImageInfo *image_info,
-  Image *image)
+  Image *image,ExceptionInfo *exception)
 {
 #define ColormapExtent  155
 #define GraymapExtent  95
@@ -573,13 +616,10 @@ static MagickBooleanType WritePICONImage(const ImageInfo *image_info,
                          "lzxcvbnmMNBVCZASDFGHJKLPIUYTREWQ!~^/()_`'][{}|";
 
   char
-    buffer[MaxTextExtent],
-    basename[MaxTextExtent],
-    name[MaxTextExtent],
-    symbol[MaxTextExtent];
-
-  ExceptionInfo
-    *exception;
+    buffer[MagickPathExtent],
+    basename[MagickPathExtent],
+    name[MagickPathExtent],
+    symbol[MagickPathExtent];
 
   Image
     *affinity_image,
@@ -592,7 +632,7 @@ static MagickBooleanType WritePICONImage(const ImageInfo *image_info,
     status,
     transparent;
 
-  MagickPixelPacket
+  PixelInfo
     pixel;
 
   QuantizeInfo
@@ -601,17 +641,14 @@ static MagickBooleanType WritePICONImage(const ImageInfo *image_info,
   RectangleInfo
     geometry;
 
-  register const IndexPacket
-    *indexes;
-
-  register const PixelPacket
+  register const Quantum
     *p;
 
   register ssize_t
     i,
     x;
 
-  register PixelPacket
+  register Quantum
     *q;
 
   size_t
@@ -627,44 +664,42 @@ static MagickBooleanType WritePICONImage(const ImageInfo *image_info,
     Open output image file.
   */
   assert(image_info != (const ImageInfo *) NULL);
-  assert(image_info->signature == MagickSignature);
+  assert(image_info->signature == MagickCoreSignature);
   assert(image != (Image *) NULL);
-  assert(image->signature == MagickSignature);
+  assert(image->signature == MagickCoreSignature);
   if (image->debug != MagickFalse)
     (void) LogMagickEvent(TraceEvent,GetMagickModule(),"%s",image->filename);
-  status=OpenBlob(image_info,image,WriteBinaryBlobMode,&image->exception);
+  assert(exception != (ExceptionInfo *) NULL);
+  assert(exception->signature == MagickCoreSignature);
+  status=OpenBlob(image_info,image,WriteBinaryBlobMode,exception);
   if (status == MagickFalse)
     return(status);
-  if (image->colorspace != RGBColorspace)
-    (void) TransformImageColorspace(image,RGBColorspace);
+  (void) TransformImageColorspace(image,sRGBColorspace,exception);
   SetGeometry(image,&geometry);
   (void) ParseMetaGeometry(PiconGeometry,&geometry.x,&geometry.y,
     &geometry.width,&geometry.height);
-  picon=ResizeImage(image,geometry.width,geometry.height,TriangleFilter,1.0,
-    &image->exception);
+  picon=ResizeImage(image,geometry.width,geometry.height,TriangleFilter,
+    exception);
   blob_info=CloneImageInfo(image_info);
   (void) AcquireUniqueFilename(blob_info->filename);
   if ((image_info->type != TrueColorType) &&
-      (IsGrayImage(image,&image->exception) != MagickFalse))
-    affinity_image=BlobToImage(blob_info,Graymap,GraymapExtent,
-      &image->exception);
+      (SetImageGray(image,exception) != MagickFalse))
+    affinity_image=BlobToImage(blob_info,Graymap,GraymapExtent,exception);
   else
-    affinity_image=BlobToImage(blob_info,Colormap,ColormapExtent,
-      &image->exception);
+    affinity_image=BlobToImage(blob_info,Colormap,ColormapExtent,exception);
   (void) RelinquishUniqueFileResource(blob_info->filename);
   blob_info=DestroyImageInfo(blob_info);
   if ((picon == (Image *) NULL) || (affinity_image == (Image *) NULL))
     return(MagickFalse);
   quantize_info=AcquireQuantizeInfo(image_info);
-  status=RemapImage(quantize_info,picon,affinity_image);
+  status=RemapImage(quantize_info,picon,affinity_image,exception);
   quantize_info=DestroyQuantizeInfo(quantize_info);
   affinity_image=DestroyImage(affinity_image);
   transparent=MagickFalse;
-  exception=(&image->exception);
   if (picon->storage_class == PseudoClass)
     {
-      (void) CompressImageColormap(picon);
-      if (picon->matte != MagickFalse)
+      (void) CompressImageColormap(picon,exception);
+      if (picon->alpha_trait != UndefinedPixelTrait)
         transparent=MagickTrue;
     }
   else
@@ -672,7 +707,7 @@ static MagickBooleanType WritePICONImage(const ImageInfo *image_info,
       /*
         Convert DirectClass to PseudoClass picon.
       */
-      if (picon->matte != MagickFalse)
+      if (picon->alpha_trait != UndefinedPixelTrait)
         {
           /*
             Map all the transparent pixels.
@@ -680,44 +715,40 @@ static MagickBooleanType WritePICONImage(const ImageInfo *image_info,
           for (y=0; y < (ssize_t) picon->rows; y++)
           {
             q=GetAuthenticPixels(picon,0,y,picon->columns,1,exception);
-            if (q == (PixelPacket *) NULL)
+            if (q == (Quantum *) NULL)
               break;
             for (x=0; x < (ssize_t) picon->columns; x++)
             {
-              if (q->opacity == (Quantum) TransparentOpacity)
+              if (GetPixelAlpha(image,q) == (Quantum) TransparentAlpha)
                 transparent=MagickTrue;
               else
-                SetOpacityPixelComponent(q,OpaqueOpacity);
-              q++;
+                SetPixelAlpha(picon,OpaqueAlpha,q);
+              q+=GetPixelChannels(picon);
             }
             if (SyncAuthenticPixels(picon,exception) == MagickFalse)
               break;
           }
         }
-      (void) SetImageType(picon,PaletteType);
+      (void) SetImageType(picon,PaletteType,exception);
     }
   colors=picon->colors;
   if (transparent != MagickFalse)
     {
-      register IndexPacket
-        *indexes;
-
       colors++;
-      picon->colormap=(PixelPacket *) ResizeQuantumMemory((void **)
+      picon->colormap=(PixelInfo *) ResizeQuantumMemory((void **)
         picon->colormap,(size_t) colors,sizeof(*picon->colormap));
-      if (picon->colormap == (PixelPacket *) NULL)
+      if (picon->colormap == (PixelInfo *) NULL)
         ThrowWriterException(ResourceLimitError,"MemoryAllocationError");
       for (y=0; y < (ssize_t) picon->rows; y++)
       {
         q=GetAuthenticPixels(picon,0,y,picon->columns,1,exception);
-        if (q == (PixelPacket *) NULL)
+        if (q == (Quantum *) NULL)
           break;
-        indexes=GetAuthenticIndexQueue(picon);
         for (x=0; x < (ssize_t) picon->columns; x++)
         {
-          if (q->opacity == (Quantum) TransparentOpacity)
-            SetIndexPixelComponent(indexes+x,picon->colors);
-          q++;
+          if (GetPixelAlpha(image,q) == (Quantum) TransparentAlpha)
+            SetPixelIndex(picon,(Quantum) picon->colors,q);
+          q+=GetPixelChannels(picon);
         }
         if (SyncAuthenticPixels(picon,exception) == MagickFalse)
           break;
@@ -734,30 +765,29 @@ static MagickBooleanType WritePICONImage(const ImageInfo *image_info,
   */
   (void) WriteBlobString(image,"/* XPM */\n");
   GetPathComponent(picon->filename,BasePath,basename);
-  (void) FormatLocaleString(buffer,MaxTextExtent,
+  (void) FormatLocaleString(buffer,MagickPathExtent,
     "static char *%s[] = {\n",basename);
   (void) WriteBlobString(image,buffer);
   (void) WriteBlobString(image,"/* columns rows colors chars-per-pixel */\n");
-  (void) FormatLocaleString(buffer,MaxTextExtent,
+  (void) FormatLocaleString(buffer,MagickPathExtent,
     "\"%.20g %.20g %.20g %.20g\",\n",(double) picon->columns,(double)
     picon->rows,(double) colors,(double) characters_per_pixel);
   (void) WriteBlobString(image,buffer);
-  GetMagickPixelPacket(image,&pixel);
+  GetPixelInfo(image,&pixel);
   for (i=0; i < (ssize_t) colors; i++)
   {
     /*
       Define XPM color.
     */
-    SetMagickPixelPacket(image,picon->colormap+i,(IndexPacket *) NULL,&pixel);
-    pixel.colorspace=RGBColorspace;
+    pixel=picon->colormap[i];
+    pixel.colorspace=sRGBColorspace;
     pixel.depth=8;
-    pixel.opacity=(MagickRealType) OpaqueOpacity;
-    (void) QueryMagickColorname(image,&pixel,XPMCompliance,name,
-      &image->exception);
+    pixel.alpha=(double) OpaqueAlpha;
+    (void) QueryColorname(image,&pixel,XPMCompliance,name,exception);
     if (transparent != MagickFalse)
       {
         if (i == (ssize_t) (colors-1))
-          (void) CopyMagickString(name,"grey75",MaxTextExtent);
+          (void) CopyMagickString(name,"grey75",MagickPathExtent);
       }
     /*
       Write XPM color.
@@ -770,7 +800,7 @@ static MagickBooleanType WritePICONImage(const ImageInfo *image_info,
       symbol[j]=Cixel[k];
     }
     symbol[j]='\0';
-    (void) FormatLocaleString(buffer,MaxTextExtent,"\"%s c %s\",\n",
+    (void) FormatLocaleString(buffer,MagickPathExtent,"\"%s c %s\",\n",
        symbol,name);
     (void) WriteBlobString(image,buffer);
   }
@@ -780,25 +810,25 @@ static MagickBooleanType WritePICONImage(const ImageInfo *image_info,
   (void) WriteBlobString(image,"/* pixels */\n");
   for (y=0; y < (ssize_t) picon->rows; y++)
   {
-    p=GetVirtualPixels(picon,0,y,picon->columns,1,&picon->exception);
-    if (p == (const PixelPacket *) NULL)
+    p=GetVirtualPixels(picon,0,y,picon->columns,1,exception);
+    if (p == (const Quantum *) NULL)
       break;
-    indexes=GetVirtualIndexQueue(picon);
     (void) WriteBlobString(image,"\"");
     for (x=0; x < (ssize_t) picon->columns; x++)
     {
-      k=((ssize_t) GetIndexPixelComponent(indexes+x) % MaxCixels);
+      k=((ssize_t) GetPixelIndex(picon,p) % MaxCixels);
       symbol[0]=Cixel[k];
       for (j=1; j < (ssize_t) characters_per_pixel; j++)
       {
-        k=(((int) GetIndexPixelComponent(indexes+x)-k)/MaxCixels) % MaxCixels;
+        k=(((int) GetPixelIndex(picon,p)-k)/MaxCixels) % MaxCixels;
         symbol[j]=Cixel[k];
       }
       symbol[j]='\0';
-      (void) CopyMagickString(buffer,symbol,MaxTextExtent);
+      (void) CopyMagickString(buffer,symbol,MagickPathExtent);
       (void) WriteBlobString(image,buffer);
+      p+=GetPixelChannels(image);
     }
-    (void) FormatLocaleString(buffer,MaxTextExtent,"\"%s\n",
+    (void) FormatLocaleString(buffer,MagickPathExtent,"\"%s\n",
       y == (ssize_t) (picon->rows-1) ? "" : ",");
     (void) WriteBlobString(image,buffer);
     status=SetImageProgress(image,SaveImageTag,(MagickOffsetType) y,
@@ -827,7 +857,8 @@ static MagickBooleanType WritePICONImage(const ImageInfo *image_info,
 %
 %  The format of the WriteXPMImage method is:
 %
-%      MagickBooleanType WriteXPMImage(const ImageInfo *image_info,Image *image)
+%      MagickBooleanType WriteXPMImage(const ImageInfo *image_info,
+%        Image *image,ExceptionInfo *exception)
 %
 %  A description of each parameter follows.
 %
@@ -835,8 +866,11 @@ static MagickBooleanType WritePICONImage(const ImageInfo *image_info,
 %
 %    o image:  The image.
 %
+%    o exception: return any errors or warnings in this structure.
+%
 */
-static MagickBooleanType WriteXPMImage(const ImageInfo *image_info,Image *image)
+static MagickBooleanType WriteXPMImage(const ImageInfo *image_info,Image *image,
+  ExceptionInfo *exception)
 {
 #define MaxCixels  92
 
@@ -845,21 +879,18 @@ static MagickBooleanType WriteXPMImage(const ImageInfo *image_info,Image *image)
                          "lzxcvbnmMNBVCZASDFGHJKLPIUYTREWQ!~^/()_`'][{}|";
 
   char
-    buffer[MaxTextExtent],
-    basename[MaxTextExtent],
-    name[MaxTextExtent],
-    symbol[MaxTextExtent];
+    buffer[MagickPathExtent],
+    basename[MagickPathExtent],
+    name[MagickPathExtent],
+    symbol[MagickPathExtent];
 
   MagickBooleanType
     status;
 
-  MagickPixelPacket
+  PixelInfo
     pixel;
 
-  register const IndexPacket
-    *indexes;
-
-  register const PixelPacket
+  register const Quantum
     *p;
 
   register ssize_t
@@ -879,25 +910,27 @@ static MagickBooleanType WriteXPMImage(const ImageInfo *image_info,Image *image)
     Open output image file.
   */
   assert(image_info != (const ImageInfo *) NULL);
-  assert(image_info->signature == MagickSignature);
+  assert(image_info->signature == MagickCoreSignature);
   assert(image != (Image *) NULL);
-  assert(image->signature == MagickSignature);
+  assert(image->signature == MagickCoreSignature);
   if (image->debug != MagickFalse)
     (void) LogMagickEvent(TraceEvent,GetMagickModule(),"%s",image->filename);
-  status=OpenBlob(image_info,image,WriteBinaryBlobMode,&image->exception);
+  assert(exception != (ExceptionInfo *) NULL);
+  assert(exception->signature == MagickCoreSignature);
+  status=OpenBlob(image_info,image,WriteBinaryBlobMode,exception);
   if (status == MagickFalse)
     return(status);
-  if (image->colorspace != RGBColorspace)
-    (void) TransformImageColorspace(image,RGBColorspace);
+  if (IssRGBCompatibleColorspace(image->colorspace) == MagickFalse)
+    (void) TransformImageColorspace(image,sRGBColorspace,exception);
   opacity=(-1);
-  if (image->matte == MagickFalse)
+  if (image->alpha_trait == UndefinedPixelTrait)
     {
       if ((image->storage_class == DirectClass) || (image->colors > 256))
-        (void) SetImageType(image,PaletteType);
+        (void) SetImageType(image,PaletteType,exception);
     }
   else
     {
-      MagickRealType
+      double
         alpha,
         beta;
 
@@ -905,37 +938,37 @@ static MagickBooleanType WriteXPMImage(const ImageInfo *image_info,Image *image)
         Identify transparent colormap index.
       */
       if ((image->storage_class == DirectClass) || (image->colors > 256))
-        (void) SetImageType(image,PaletteBilevelMatteType);
+        (void) SetImageType(image,PaletteBilevelAlphaType,exception);
       for (i=0; i < (ssize_t) image->colors; i++)
-        if (image->colormap[i].opacity != OpaqueOpacity)
+        if (image->colormap[i].alpha != OpaqueAlpha)
           {
             if (opacity < 0)
               {
                 opacity=i;
                 continue;
               }
-            alpha=(Quantum) TransparentOpacity-(MagickRealType)
-              image->colormap[i].opacity;
-            beta=(Quantum) TransparentOpacity-(MagickRealType)
-              image->colormap[opacity].opacity;
+            alpha=(double) TransparentAlpha-(double)
+              image->colormap[i].alpha;
+            beta=(double) TransparentAlpha-(double)
+              image->colormap[opacity].alpha;
             if (alpha < beta)
               opacity=i;
           }
       if (opacity == -1)
         {
-          (void) SetImageType(image,PaletteBilevelMatteType);
+          (void) SetImageType(image,PaletteBilevelAlphaType,exception);
           for (i=0; i < (ssize_t) image->colors; i++)
-            if (image->colormap[i].opacity != OpaqueOpacity)
+            if (image->colormap[i].alpha != OpaqueAlpha)
               {
                 if (opacity < 0)
                   {
                     opacity=i;
                     continue;
                   }
-                alpha=(Quantum) TransparentOpacity-(MagickRealType)
-                  image->colormap[i].opacity;
-                beta=(Quantum) TransparentOpacity-(MagickRealType)
-                  image->colormap[opacity].opacity;
+                alpha=(Quantum) TransparentAlpha-(double)
+                  image->colormap[i].alpha;
+                beta=(Quantum) TransparentAlpha-(double)
+                  image->colormap[opacity].alpha;
                 if (alpha < beta)
                   opacity=i;
               }
@@ -960,36 +993,35 @@ static MagickBooleanType WriteXPMImage(const ImageInfo *image_info,Image *image)
   GetPathComponent(image->filename,BasePath,basename);
   if (isalnum((int) ((unsigned char) *basename)) == 0)
     {
-      (void) FormatLocaleString(buffer,MaxTextExtent,"xpm_%s",basename);
-      (void) CopyMagickString(basename,buffer,MaxTextExtent);
+      (void) FormatLocaleString(buffer,MagickPathExtent,"xpm_%s",basename);
+      (void) CopyMagickString(basename,buffer,MagickPathExtent);
     }
   if (isalpha((int) ((unsigned char) basename[0])) == 0)
     basename[0]='_';
   for (i=1; basename[i] != '\0'; i++)
     if (isalnum((int) ((unsigned char) basename[i])) == 0)
       basename[i]='_';
-  (void) FormatLocaleString(buffer,MaxTextExtent,
+  (void) FormatLocaleString(buffer,MagickPathExtent,
     "static char *%s[] = {\n",basename);
   (void) WriteBlobString(image,buffer);
   (void) WriteBlobString(image,"/* columns rows colors chars-per-pixel */\n");
-  (void) FormatLocaleString(buffer,MaxTextExtent,
+  (void) FormatLocaleString(buffer,MagickPathExtent,
     "\"%.20g %.20g %.20g %.20g \",\n",(double) image->columns,(double)
     image->rows,(double) image->colors,(double) characters_per_pixel);
   (void) WriteBlobString(image,buffer);
-  GetMagickPixelPacket(image,&pixel);
+  GetPixelInfo(image,&pixel);
   for (i=0; i < (ssize_t) image->colors; i++)
   {
     /*
       Define XPM color.
     */
-    SetMagickPixelPacket(image,image->colormap+i,(IndexPacket *) NULL,&pixel);
-    pixel.colorspace=RGBColorspace;
+    pixel=image->colormap[i];
+    pixel.colorspace=sRGBColorspace;
     pixel.depth=8;
-    pixel.opacity=(MagickRealType) OpaqueOpacity;
-    (void) QueryMagickColorname(image,&pixel,XPMCompliance,name,
-      &image->exception);
+    pixel.alpha=(double) OpaqueAlpha;
+    (void) QueryColorname(image,&pixel,XPMCompliance,name,exception);
     if (i == opacity)
-      (void) CopyMagickString(name,"None",MaxTextExtent);
+      (void) CopyMagickString(name,"None",MagickPathExtent);
     /*
       Write XPM color.
     */
@@ -1001,7 +1033,7 @@ static MagickBooleanType WriteXPMImage(const ImageInfo *image_info,Image *image)
       symbol[j]=Cixel[k];
     }
     symbol[j]='\0';
-    (void) FormatLocaleString(buffer,MaxTextExtent,"\"%s c %s\",\n",symbol,
+    (void) FormatLocaleString(buffer,MagickPathExtent,"\"%s c %s\",\n",symbol,
       name);
     (void) WriteBlobString(image,buffer);
   }
@@ -1011,25 +1043,25 @@ static MagickBooleanType WriteXPMImage(const ImageInfo *image_info,Image *image)
   (void) WriteBlobString(image,"/* pixels */\n");
   for (y=0; y < (ssize_t) image->rows; y++)
   {
-    p=GetVirtualPixels(image,0,y,image->columns,1,&image->exception);
-    if (p == (const PixelPacket *) NULL)
+    p=GetVirtualPixels(image,0,y,image->columns,1,exception);
+    if (p == (const Quantum *) NULL)
       break;
-    indexes=GetVirtualIndexQueue(image);
     (void) WriteBlobString(image,"\"");
     for (x=0; x < (ssize_t) image->columns; x++)
     {
-      k=((ssize_t) GetIndexPixelComponent(indexes+x) % MaxCixels);
+      k=((ssize_t) GetPixelIndex(image,p) % MaxCixels);
       symbol[0]=Cixel[k];
       for (j=1; j < (ssize_t) characters_per_pixel; j++)
       {
-        k=(((int) GetIndexPixelComponent(indexes+x)-k)/MaxCixels) % MaxCixels;
+        k=(((int) GetPixelIndex(image,p)-k)/MaxCixels) % MaxCixels;
         symbol[j]=Cixel[k];
       }
       symbol[j]='\0';
-      (void) CopyMagickString(buffer,symbol,MaxTextExtent);
+      (void) CopyMagickString(buffer,symbol,MagickPathExtent);
       (void) WriteBlobString(image,buffer);
+      p+=GetPixelChannels(image);
     }
-    (void) FormatLocaleString(buffer,MaxTextExtent,"\"%s\n",
+    (void) FormatLocaleString(buffer,MagickPathExtent,"\"%s\n",
       (y == (ssize_t) (image->rows-1) ? "" : ","));
     (void) WriteBlobString(image,buffer);
     if (image->previous == (Image *) NULL)

@@ -13,11 +13,11 @@
 %             Read/Write Microsoft XML Paper Specification Format             %
 %                                                                             %
 %                              Software Design                                %
-%                                John Cristy                                  %
+%                                   Cristy                                    %
 %                               January 2008                                  %
 %                                                                             %
 %                                                                             %
-%  Copyright 1999-2011 ImageMagick Studio LLC, a non-profit organization      %
+%  Copyright 1999-2016 ImageMagick Studio LLC, a non-profit organization      %
 %  dedicated to making software imaging solutions freely available.           %
 %                                                                             %
 %  You may not use this file except in compliance with the License.  You may  %
@@ -39,35 +39,37 @@
 /*
   Include declarations.
 */
-#include "magick/studio.h"
-#include "magick/property.h"
-#include "magick/blob.h"
-#include "magick/blob-private.h"
-#include "magick/color.h"
-#include "magick/color-private.h"
-#include "magick/colorspace.h"
-#include "magick/constitute.h"
-#include "magick/delegate.h"
-#include "magick/draw.h"
-#include "magick/exception.h"
-#include "magick/exception-private.h"
-#include "magick/geometry.h"
-#include "magick/image.h"
-#include "magick/image-private.h"
-#include "magick/list.h"
-#include "magick/magick.h"
-#include "magick/memory_.h"
-#include "magick/monitor.h"
-#include "magick/monitor-private.h"
-#include "magick/profile.h"
-#include "magick/resource_.h"
-#include "magick/quantum-private.h"
-#include "magick/static.h"
-#include "magick/string_.h"
-#include "magick/module.h"
-#include "magick/token.h"
-#include "magick/transform.h"
-#include "magick/utility.h"
+#include "MagickCore/studio.h"
+#include "MagickCore/artifact.h"
+#include "MagickCore/blob.h"
+#include "MagickCore/blob-private.h"
+#include "MagickCore/color.h"
+#include "MagickCore/color-private.h"
+#include "MagickCore/colorspace.h"
+#include "MagickCore/constitute.h"
+#include "MagickCore/delegate.h"
+#include "MagickCore/draw.h"
+#include "MagickCore/exception.h"
+#include "MagickCore/exception-private.h"
+#include "MagickCore/geometry.h"
+#include "MagickCore/image.h"
+#include "MagickCore/image-private.h"
+#include "MagickCore/list.h"
+#include "MagickCore/magick.h"
+#include "MagickCore/memory_.h"
+#include "MagickCore/monitor.h"
+#include "MagickCore/monitor-private.h"
+#include "MagickCore/option.h"
+#include "MagickCore/profile.h"
+#include "MagickCore/property.h"
+#include "MagickCore/resource_.h"
+#include "MagickCore/quantum-private.h"
+#include "MagickCore/static.h"
+#include "MagickCore/string_.h"
+#include "MagickCore/module.h"
+#include "MagickCore/token.h"
+#include "MagickCore/transform.h"
+#include "MagickCore/utility.h"
 
 /*
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -103,12 +105,12 @@ static Image *ReadXPSImage(const ImageInfo *image_info,ExceptionInfo *exception)
 #define RenderXPSText  "  Rendering XPS...  "
 
   char
-    command[MaxTextExtent],
-    density[MaxTextExtent],
-    filename[MaxTextExtent],
-    geometry[MaxTextExtent],
-    options[MaxTextExtent],
-    input_filename[MaxTextExtent];
+    command[MagickPathExtent],
+    *density,
+    filename[MagickPathExtent],
+    geometry[MagickPathExtent],
+    *options,
+    input_filename[MagickPathExtent];
 
   const DelegateInfo
     *delegate_info;
@@ -148,16 +150,16 @@ static Image *ReadXPSImage(const ImageInfo *image_info,ExceptionInfo *exception)
     count;
 
   assert(image_info != (const ImageInfo *) NULL);
-  assert(image_info->signature == MagickSignature);
+  assert(image_info->signature == MagickCoreSignature);
   if (image_info->debug != MagickFalse)
     (void) LogMagickEvent(TraceEvent,GetMagickModule(),"%s",
       image_info->filename);
   assert(exception != (ExceptionInfo *) NULL);
-  assert(exception->signature == MagickSignature);
+  assert(exception->signature == MagickCoreSignature);
   /*
     Open image file.
   */
-  image=AcquireImage(image_info);
+  image=AcquireImage(image_info,exception);
   status=OpenBlob(image_info,image,ReadBinaryBlobMode,exception);
   if (status == MagickFalse)
     {
@@ -177,7 +179,7 @@ static Image *ReadXPSImage(const ImageInfo *image_info,ExceptionInfo *exception)
   */
   delta.x=DefaultResolution;
   delta.y=DefaultResolution;
-  if ((image->x_resolution == 0.0) || (image->y_resolution == 0.0))
+  if ((image->resolution.x == 0.0) || (image->resolution.y == 0.0))
     {
       GeometryInfo
         geometry_info;
@@ -186,13 +188,11 @@ static Image *ReadXPSImage(const ImageInfo *image_info,ExceptionInfo *exception)
         flags;
 
       flags=ParseGeometry(PSDensityGeometry,&geometry_info);
-      image->x_resolution=geometry_info.rho;
-      image->y_resolution=geometry_info.sigma;
+      image->resolution.x=geometry_info.rho;
+      image->resolution.y=geometry_info.sigma;
       if ((flags & SigmaValue) == 0)
-        image->y_resolution=image->x_resolution;
+        image->resolution.y=image->resolution.x;
     }
-  (void) FormatLocaleString(density,MaxTextExtent,"%gx%g",
-    image->x_resolution,image->y_resolution);
   /*
     Determine page geometry from the XPS media box.
   */
@@ -212,7 +212,7 @@ static Image *ReadXPSImage(const ImageInfo *image_info,ExceptionInfo *exception)
     */
     *p++=(char) c;
     if ((c != (int) '/') && (c != '\n') &&
-        ((size_t) (p-command) < (MaxTextExtent-1)))
+        ((size_t) (p-command) < (MagickPathExtent-1)))
       continue;
     *p='\0';
     p=command;
@@ -248,8 +248,8 @@ static Image *ReadXPSImage(const ImageInfo *image_info,ExceptionInfo *exception)
     /*
       Set XPS render geometry.
     */
-    width=(size_t) floor(bounds.x2-bounds.x1+0.5);
-    height=(size_t) floor(bounds.y2-bounds.y1+0.5);
+    width=(size_t) (floor(bounds.x2+0.5)-ceil(bounds.x1-0.5));
+    height=(size_t) (floor(bounds.y2+0.5)-ceil(bounds.y1-0.5));
     if (width > page.width)
       page.width=width;
     if (height > page.height)
@@ -263,7 +263,7 @@ static Image *ReadXPSImage(const ImageInfo *image_info,ExceptionInfo *exception)
     (void) ParseAbsoluteGeometry(PSPageGeometry,&page);
   if (image_info->page != (char *) NULL)
     (void) ParseAbsoluteGeometry(image_info->page,&page);
-  (void) FormatLocaleString(geometry,MaxTextExtent,"%.20gx%.20g",(double)
+  (void) FormatLocaleString(geometry,MagickPathExtent,"%.20gx%.20g",(double)
     page.width,(double) page.height);
   if (image_info->monochrome != MagickFalse)
     delegate_info=GetDelegateInfo("xps:mono",(char *) NULL,exception);
@@ -274,15 +274,17 @@ static Image *ReadXPSImage(const ImageInfo *image_info,ExceptionInfo *exception)
        delegate_info=GetDelegateInfo("xps:color",(char *) NULL,exception);
   if (delegate_info == (const DelegateInfo *) NULL)
     return((Image *) NULL);
-  *options='\0';
+  density=AcquireString("");
+  options=AcquireString("");
+  (void) FormatLocaleString(density,MagickPathExtent,"%gx%g",
+    image->resolution.x,image->resolution.y);
   if ((page.width == 0) || (page.height == 0))
     (void) ParseAbsoluteGeometry(PSPageGeometry,&page);
   if (image_info->page != (char *) NULL)
     (void) ParseAbsoluteGeometry(image_info->page,&page);
-  page.width=(size_t) floor(page.width*image->y_resolution/delta.x+0.5);
-  page.height=(size_t) floor(page.height*image->y_resolution/delta.y+
-    0.5);
-  (void) FormatLocaleString(options,MaxTextExtent,"-g%.20gx%.20g ",(double)
+  page.width=(size_t) floor(page.width*image->resolution.y/delta.x+0.5);
+  page.height=(size_t) floor(page.height*image->resolution.y/delta.y+0.5);
+  (void) FormatLocaleString(options,MagickPathExtent,"-g%.20gx%.20g ",(double)
     page.width,(double) page.height);
   image=DestroyImage(image);
   read_info=CloneImageInfo(image_info);
@@ -290,28 +292,27 @@ static Image *ReadXPSImage(const ImageInfo *image_info,ExceptionInfo *exception)
   if (read_info->number_scenes != 0)
     {
       if (read_info->number_scenes != 1)
-        (void) FormatLocaleString(options,MaxTextExtent,"-dLastPage=%.20g",
+        (void) FormatLocaleString(options,MagickPathExtent,"-dLastPage=%.20g",
           (double) (read_info->scene+read_info->number_scenes));
       else
-        (void) FormatLocaleString(options,MaxTextExtent,
+        (void) FormatLocaleString(options,MagickPathExtent,
           "-dFirstPage=%.20g -dLastPage=%.20g",(double) read_info->scene+1,
           (double) (read_info->scene+read_info->number_scenes));
       read_info->number_scenes=0;
       if (read_info->scenes != (char *) NULL)
         *read_info->scenes='\0';
     }
-  if (read_info->authenticate != (char *) NULL)
-    (void) FormatLocaleString(options+strlen(options),MaxTextExtent,
-      " -sXPSPassword=%s",read_info->authenticate);
-  (void) CopyMagickString(filename,read_info->filename,MaxTextExtent);
+  (void) CopyMagickString(filename,read_info->filename,MagickPathExtent);
   (void) AcquireUniqueFilename(read_info->filename);
-  (void) FormatLocaleString(command,MaxTextExtent,
+  (void) FormatLocaleString(command,MagickPathExtent,
     GetDelegateCommands(delegate_info),
     read_info->antialias != MagickFalse ? 4 : 1,
     read_info->antialias != MagickFalse ? 4 : 1,density,options,
     read_info->filename,input_filename);
-  status=SystemCommand(MagickFalse,read_info->verbose,command,exception) != 0 ?
-    MagickTrue : MagickFalse;
+  options=DestroyString(options);
+  density=DestroyString(density);
+  status=ExternalDelegateCommand(MagickFalse,read_info->verbose,command,
+    (char *) NULL,exception) != 0 ? MagickTrue : MagickFalse;
   image=ReadImage(read_info,exception);
   (void) RelinquishUniqueFileResource(read_info->filename);
   (void) RelinquishUniqueFileResource(input_filename);
@@ -323,7 +324,7 @@ static Image *ReadXPSImage(const ImageInfo *image_info,ExceptionInfo *exception)
       Image
         *cmyk_image;
 
-      cmyk_image=ConsolidateCMYKImages(image,&image->exception);
+      cmyk_image=ConsolidateCMYKImages(image,exception);
       if (cmyk_image != (Image *) NULL)
         {
           image=DestroyImageList(image);
@@ -332,7 +333,7 @@ static Image *ReadXPSImage(const ImageInfo *image_info,ExceptionInfo *exception)
     }
   do
   {
-    (void) CopyMagickString(image->filename,filename,MaxTextExtent);
+    (void) CopyMagickString(image->filename,filename,MagickPathExtent);
     image->page=page;
     next_image=SyncNextImageInList(image);
     if (next_image != (Image *) NULL)
@@ -369,14 +370,12 @@ ModuleExport size_t RegisterXPSImage(void)
   MagickInfo
     *entry;
 
-  entry=SetMagickInfo("XPS");
+  entry=AcquireMagickInfo("XPS","XPS","Microsoft XML Paper Specification");
   entry->decoder=(DecodeImageHandler *) ReadXPSImage;
-  entry->adjoin=MagickFalse;
-  entry->blob_support=MagickFalse;
-  entry->seekable_stream=MagickTrue;
-  entry->thread_support=EncoderThreadSupport;
-  entry->description=ConstantString("Microsoft XML Paper Specification");
-  entry->module=ConstantString("XPS");
+  entry->flags^=CoderAdjoinFlag;
+  entry->flags^=CoderBlobSupportFlag;
+  entry->flags^=CoderDecoderThreadSupportFlag;
+  entry->flags|=CoderSeekableStreamFlag;
   (void) RegisterMagickInfo(entry);
   return(MagickImageCoderSignature);
 }

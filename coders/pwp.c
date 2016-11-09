@@ -13,11 +13,11 @@
 %                    Read Seattle Film Works Image Format                     %
 %                                                                             %
 %                              Software Design                                %
-%                                John Cristy                                  %
+%                                   Cristy                                    %
 %                                 July 1992                                   %
 %                                                                             %
 %                                                                             %
-%  Copyright 1999-2011 ImageMagick Studio LLC, a non-profit organization      %
+%  Copyright 1999-2016 ImageMagick Studio LLC, a non-profit organization      %
 %  dedicated to making software imaging solutions freely available.           %
 %                                                                             %
 %  You may not use this file except in compliance with the License.  You may  %
@@ -39,24 +39,24 @@
 /*
   Include declarations.
 */
-#include "magick/studio.h"
-#include "magick/blob.h"
-#include "magick/blob-private.h"
-#include "magick/constitute.h"
-#include "magick/exception.h"
-#include "magick/exception-private.h"
-#include "magick/image.h"
-#include "magick/image-private.h"
-#include "magick/list.h"
-#include "magick/magick.h"
-#include "magick/memory_.h"
-#include "magick/monitor.h"
-#include "magick/monitor-private.h"
-#include "magick/resource_.h"
-#include "magick/quantum-private.h"
-#include "magick/static.h"
-#include "magick/string_.h"
-#include "magick/module.h"
+#include "MagickCore/studio.h"
+#include "MagickCore/blob.h"
+#include "MagickCore/blob-private.h"
+#include "MagickCore/constitute.h"
+#include "MagickCore/exception.h"
+#include "MagickCore/exception-private.h"
+#include "MagickCore/image.h"
+#include "MagickCore/image-private.h"
+#include "MagickCore/list.h"
+#include "MagickCore/magick.h"
+#include "MagickCore/memory_.h"
+#include "MagickCore/monitor.h"
+#include "MagickCore/monitor-private.h"
+#include "MagickCore/resource_.h"
+#include "MagickCore/quantum-private.h"
+#include "MagickCore/static.h"
+#include "MagickCore/string_.h"
+#include "MagickCore/module.h"
 
 /*
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -153,25 +153,25 @@ static Image *ReadPWPImage(const ImageInfo *image_info,ExceptionInfo *exception)
     count;
 
   unsigned char
-    magick[MaxTextExtent];
+    magick[MagickPathExtent];
 
   /*
     Open image file.
   */
   assert(image_info != (const ImageInfo *) NULL);
-  assert(image_info->signature == MagickSignature);
+  assert(image_info->signature == MagickCoreSignature);
   if (image_info->debug != MagickFalse)
     (void) LogMagickEvent(TraceEvent,GetMagickModule(),"%s",
       image_info->filename);
   assert(exception != (ExceptionInfo *) NULL);
-  assert(exception->signature == MagickSignature);
-  pwp_image=AcquireImage(image_info);
+  assert(exception->signature == MagickCoreSignature);
+  pwp_image=AcquireImage(image_info,exception);
   image=pwp_image;
   status=OpenBlob(image_info,pwp_image,ReadBinaryBlobMode,exception);
   if (status == MagickFalse)
     return((Image *) NULL);
   count=ReadBlob(pwp_image,5,magick);
-  if ((count == 0) || (LocaleNCompare((char *) magick,"SFW95",5) != 0))
+  if ((count != 5) || (LocaleNCompare((char *) magick,"SFW95",5) != 0))
     ThrowReaderException(CorruptImageError,"ImproperImageHeader");
   read_info=CloneImageInfo(image_info);
   (void) SetImageInfoProgressMonitor(read_info,(MagickProgressMonitor) NULL,
@@ -191,7 +191,10 @@ static Image *ReadPWPImage(const ImageInfo *image_info,ExceptionInfo *exception)
     if (c == EOF)
       break;
     if (LocaleNCompare((char *) (magick+12),"SFW94A",6) != 0)
-      ThrowReaderException(CorruptImageError,"ImproperImageHeader");
+      {
+        (void) RelinquishUniqueFileResource(read_info->filename);
+        ThrowReaderException(CorruptImageError,"ImproperImageHeader");
+      }
     /*
       Dump SFW image to a temporary file.
     */
@@ -200,6 +203,7 @@ static Image *ReadPWPImage(const ImageInfo *image_info,ExceptionInfo *exception)
       file=fdopen(unique_file,"wb");
     if ((unique_file == -1) || (file == (FILE *) NULL))
       {
+        (void) RelinquishUniqueFileResource(read_info->filename);
         ThrowFileException(exception,FileOpenError,"UnableToWriteFile",
           image->filename);
         image=DestroyImageList(image);
@@ -217,7 +221,7 @@ static Image *ReadPWPImage(const ImageInfo *image_info,ExceptionInfo *exception)
     next_image=ReadImage(read_info,exception);
     if (next_image == (Image *) NULL)
       break;
-    (void) FormatLocaleString(next_image->filename,MaxTextExtent,
+    (void) FormatLocaleString(next_image->filename,MagickPathExtent,
       "slide_%02ld.sfw",(long) next_image->scene);
     if (image == (Image *) NULL)
       image=next_image;
@@ -239,10 +243,10 @@ static Image *ReadPWPImage(const ImageInfo *image_info,ExceptionInfo *exception)
     if (status == MagickFalse)
       break;
   }
+  if (unique_file != -1)
+    (void) close(unique_file);
   (void) RelinquishUniqueFileResource(read_info->filename);
   read_info=DestroyImageInfo(read_info);
-  (void) CloseBlob(pwp_image);
-  pwp_image=DestroyImage(pwp_image);
   if (EOFBlob(image) != MagickFalse)
     {
       char
@@ -285,11 +289,9 @@ ModuleExport size_t RegisterPWPImage(void)
   MagickInfo
     *entry;
 
-  entry=SetMagickInfo("PWP");
+  entry=AcquireMagickInfo("PWP","PWP","Seattle Film Works");
   entry->decoder=(DecodeImageHandler *) ReadPWPImage;
   entry->magick=(IsImageFormatHandler *) IsPWP;
-  entry->description=ConstantString("Seattle Film Works");
-  entry->module=ConstantString("PWP");
   (void) RegisterMagickInfo(entry);
   return(MagickImageCoderSignature);
 }

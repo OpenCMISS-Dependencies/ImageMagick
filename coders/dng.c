@@ -13,11 +13,11 @@
 %                  Read the Digital Negative Image Format                     %
 %                                                                             %
 %                              Software Design                                %
-%                                John Cristy                                  %
+%                                   Cristy                                    %
 %                                 July 1999                                   %
 %                                                                             %
 %                                                                             %
-%  Copyright 1999-2011 ImageMagick Studio LLC, a non-profit organization      %
+%  Copyright 1999-2016 ImageMagick Studio LLC, a non-profit organization      %
 %  dedicated to making software imaging solutions freely available.           %
 %                                                                             %
 %  You may not use this file except in compliance with the License.  You may  %
@@ -38,29 +38,30 @@
 /*
   Include declarations.
 */
-#include "magick/studio.h"
-#include "magick/blob.h"
-#include "magick/blob-private.h"
-#include "magick/constitute.h"
-#include "magick/delegate.h"
-#include "magick/exception.h"
-#include "magick/exception-private.h"
-#include "magick/geometry.h"
-#include "magick/image.h"
-#include "magick/image-private.h"
-#include "magick/layer.h"
-#include "magick/list.h"
-#include "magick/log.h"
-#include "magick/magick.h"
-#include "magick/memory_.h"
-#include "magick/resource_.h"
-#include "magick/quantum-private.h"
-#include "magick/static.h"
-#include "magick/string_.h"
-#include "magick/module.h"
-#include "magick/transform.h"
-#include "magick/utility.h"
-#include "magick/xml-tree.h"
+#include "MagickCore/studio.h"
+#include "MagickCore/blob.h"
+#include "MagickCore/blob-private.h"
+#include "MagickCore/constitute.h"
+#include "MagickCore/delegate.h"
+#include "MagickCore/exception.h"
+#include "MagickCore/exception-private.h"
+#include "MagickCore/geometry.h"
+#include "MagickCore/image.h"
+#include "MagickCore/image-private.h"
+#include "MagickCore/layer.h"
+#include "MagickCore/list.h"
+#include "MagickCore/log.h"
+#include "MagickCore/magick.h"
+#include "MagickCore/memory_.h"
+#include "MagickCore/resource_.h"
+#include "MagickCore/quantum-private.h"
+#include "MagickCore/static.h"
+#include "MagickCore/string_.h"
+#include "MagickCore/module.h"
+#include "MagickCore/transform.h"
+#include "MagickCore/utility.h"
+#include "MagickCore/xml-tree.h"
+#include "MagickCore/xml-tree-private.h"
 
 /*
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -107,13 +108,13 @@ static Image *ReadDNGImage(const ImageInfo *image_info,ExceptionInfo *exception)
     Open image file.
   */
   assert(image_info != (const ImageInfo *) NULL);
-  assert(image_info->signature == MagickSignature);
+  assert(image_info->signature == MagickCoreSignature);
   if (image_info->debug != MagickFalse)
     (void) LogMagickEvent(TraceEvent,GetMagickModule(),"%s",
       image_info->filename);
   assert(exception != (ExceptionInfo *) NULL);
-  assert(exception->signature == MagickSignature);
-  image=AcquireImage(image_info);
+  assert(exception->signature == MagickCoreSignature);
+  image=AcquireImage(image_info,exception);
   status=OpenBlob(image_info,image,ReadBinaryBlobMode,exception);
   if (status == MagickFalse)
     {
@@ -125,19 +126,19 @@ static Image *ReadDNGImage(const ImageInfo *image_info,ExceptionInfo *exception)
   /*
     Convert DNG to PPM with delegate.
   */
-  image=AcquireImage(image_info);
+  image=AcquireImage(image_info,exception);
   read_info=CloneImageInfo(image_info);
   SetImageInfoBlob(read_info,(void *) NULL,0);
   (void) InvokeDelegate(read_info,image,"dng:decode",(char *) NULL,exception);
   image=DestroyImage(image);
-  (void) FormatLocaleString(read_info->filename,MaxTextExtent,"%s.png",
+  (void) FormatLocaleString(read_info->filename,MagickPathExtent,"%s.png",
     read_info->unique);
   sans_exception=AcquireExceptionInfo();
   image=ReadImage(read_info,sans_exception);
   sans_exception=DestroyExceptionInfo(sans_exception);
   if (image == (Image *) NULL)
     {
-      (void) FormatLocaleString(read_info->filename,MaxTextExtent,"%s.ppm",
+      (void) FormatLocaleString(read_info->filename,MagickPathExtent,"%s.ppm",
         read_info->unique);
       image=ReadImage(read_info,exception);
     }
@@ -145,17 +146,17 @@ static Image *ReadDNGImage(const ImageInfo *image_info,ExceptionInfo *exception)
   if (image != (Image *) NULL)
     {
       char
-        filename[MaxTextExtent],
+        filename[MagickPathExtent],
         *xml;
 
       ExceptionInfo
         *sans;
 
-      (void) CopyMagickString(image->magick,read_info->magick,MaxTextExtent);
-      (void) FormatLocaleString(filename,MaxTextExtent,"%s.ufraw",
+      (void) CopyMagickString(image->magick,read_info->magick,MagickPathExtent);
+      (void) FormatLocaleString(filename,MagickPathExtent,"%s.ufraw",
         read_info->unique);
       sans=AcquireExceptionInfo();
-      xml=FileToString(filename,MaxTextExtent,sans);
+      xml=FileToString(filename,MagickPathExtent,sans);
       (void) RelinquishUniqueFileResource(filename);
       if (xml != (char *) NULL)
         {
@@ -170,7 +171,7 @@ static Image *ReadDNGImage(const ImageInfo *image_info,ExceptionInfo *exception)
             {
               char
                 *content,
-                property[MaxTextExtent];
+                property[MagickPathExtent];
 
               const char
                 *tag;
@@ -188,7 +189,7 @@ static Image *ReadDNGImage(const ImageInfo *image_info,ExceptionInfo *exception)
                 tag=GetXMLTreeTag(next);
                 if (tag == (char *) NULL)
                   tag="unknown";
-                (void) FormatLocaleString(property,MaxTextExtent,"dng:%s",tag);
+                (void) FormatLocaleString(property,MagickPathExtent,"dng:%s",tag);
                 content=ConstantString(GetXMLTreeContent(next)); 
                 StripString(content);
                 if ((LocaleCompare(tag,"log") != 0) &&
@@ -239,141 +240,143 @@ ModuleExport size_t RegisterDNGImage(void)
   MagickInfo
     *entry;
 
-  entry=SetMagickInfo("3FR");
+  entry=AcquireMagickInfo("DNG","3FR","Hasselblad CFV/H3D39II");
   entry->decoder=(DecodeImageHandler *) ReadDNGImage;
-  entry->blob_support=MagickFalse;
-  entry->seekable_stream=MagickTrue;
+  entry->flags^=CoderBlobSupportFlag;
+  entry->flags|=CoderSeekableStreamFlag;
   entry->format_type=ExplicitFormatType;
-  entry->description=ConstantString("Hasselblad CFV/H3D39II");
-  entry->module=ConstantString("DNG");
   (void) RegisterMagickInfo(entry);
-  entry=SetMagickInfo("ARW");
+  entry=AcquireMagickInfo("DNG","ARW","Sony Alpha Raw Image Format");
   entry->decoder=(DecodeImageHandler *) ReadDNGImage;
-  entry->blob_support=MagickFalse;
-  entry->seekable_stream=MagickTrue;
+  entry->flags^=CoderBlobSupportFlag;
+  entry->flags|=CoderSeekableStreamFlag;
   entry->format_type=ExplicitFormatType;
-  entry->description=ConstantString("Sony Alpha Raw Image Format");
-  entry->module=ConstantString("DNG");
   (void) RegisterMagickInfo(entry);
-  entry=SetMagickInfo("DNG");
+  entry=AcquireMagickInfo("DNG","DNG","Digital Negative");
   entry->decoder=(DecodeImageHandler *) ReadDNGImage;
-  entry->blob_support=MagickFalse;
-  entry->seekable_stream=MagickTrue;
+  entry->flags^=CoderBlobSupportFlag;
+  entry->flags|=CoderSeekableStreamFlag;
   entry->format_type=ExplicitFormatType;
-  entry->description=ConstantString("Digital Negative");
-  entry->module=ConstantString("DNG");
   (void) RegisterMagickInfo(entry);
-  entry=SetMagickInfo("CR2");
+  entry=AcquireMagickInfo("DNG","CR2","Canon Digital Camera Raw Image Format");
   entry->decoder=(DecodeImageHandler *) ReadDNGImage;
-  entry->blob_support=MagickFalse;
-  entry->seekable_stream=MagickTrue;
+  entry->flags^=CoderBlobSupportFlag;
+  entry->flags|=CoderSeekableStreamFlag;
   entry->format_type=ExplicitFormatType;
-  entry->description=ConstantString("Canon Digital Camera Raw Image Format");
-  entry->module=ConstantString("DNG");
   (void) RegisterMagickInfo(entry);
-  entry=SetMagickInfo("CRW");
+  entry=AcquireMagickInfo("DNG","CRW","Canon Digital Camera Raw Image Format");
   entry->decoder=(DecodeImageHandler *) ReadDNGImage;
-  entry->blob_support=MagickFalse;
-  entry->seekable_stream=MagickTrue;
+  entry->flags^=CoderBlobSupportFlag;
+  entry->flags|=CoderSeekableStreamFlag;
   entry->format_type=ExplicitFormatType;
-  entry->description=ConstantString("Canon Digital Camera Raw Image Format");
-  entry->module=ConstantString("DNG");
   (void) RegisterMagickInfo(entry);
-  entry=SetMagickInfo("DCR");
+  entry=AcquireMagickInfo("DNG","DCR","Kodak Digital Camera Raw Image File");
   entry->decoder=(DecodeImageHandler *) ReadDNGImage;
-  entry->blob_support=MagickFalse;
-  entry->seekable_stream=MagickTrue;
+  entry->flags^=CoderBlobSupportFlag;
+  entry->flags|=CoderSeekableStreamFlag;
   entry->format_type=ExplicitFormatType;
-  entry->description=ConstantString("Kodak Digital Camera Raw Image File");
-  entry->module=ConstantString("DNG");
   (void) RegisterMagickInfo(entry);
-  entry=SetMagickInfo("ERF");
+  entry=AcquireMagickInfo("DNG","ERF","Epson RAW Format");
   entry->decoder=(DecodeImageHandler *) ReadDNGImage;
-  entry->blob_support=MagickFalse;
-  entry->seekable_stream=MagickTrue;
+  entry->flags^=CoderBlobSupportFlag;
+  entry->flags|=CoderSeekableStreamFlag;
   entry->format_type=ExplicitFormatType;
-  entry->description=ConstantString("Epson RAW Format");
-  entry->module=ConstantString("DNG");
   (void) RegisterMagickInfo(entry);
-  entry=SetMagickInfo("KDC");
+  entry=AcquireMagickInfo("DNG","IIQ","Phase One Raw Image Format");
   entry->decoder=(DecodeImageHandler *) ReadDNGImage;
-  entry->blob_support=MagickFalse;
-  entry->seekable_stream=MagickTrue;
+  entry->flags^=CoderBlobSupportFlag;
+  entry->flags|=CoderSeekableStreamFlag;
   entry->format_type=ExplicitFormatType;
-  entry->description=ConstantString("Kodak Digital Camera Raw Image Format");
-  entry->module=ConstantString("DNG");
   (void) RegisterMagickInfo(entry);
-  entry=SetMagickInfo("K25");
+  entry=AcquireMagickInfo("DNG","KDC","Kodak Digital Camera Raw Image Format");
   entry->decoder=(DecodeImageHandler *) ReadDNGImage;
-  entry->blob_support=MagickFalse;
-  entry->seekable_stream=MagickTrue;
+  entry->flags^=CoderBlobSupportFlag;
+  entry->flags|=CoderSeekableStreamFlag;
   entry->format_type=ExplicitFormatType;
-  entry->description=ConstantString("Kodak Digital Camera Raw Image Format");
-  entry->module=ConstantString("DNG");
   (void) RegisterMagickInfo(entry);
-  entry=SetMagickInfo("MRW");
+  entry=AcquireMagickInfo("DNG","K25","Kodak Digital Camera Raw Image Format");
   entry->decoder=(DecodeImageHandler *) ReadDNGImage;
-  entry->blob_support=MagickFalse;
-  entry->seekable_stream=MagickTrue;
+  entry->flags^=CoderBlobSupportFlag;
+  entry->flags|=CoderSeekableStreamFlag;
   entry->format_type=ExplicitFormatType;
-  entry->description=ConstantString("Sony (Minolta) Raw Image File");
-  entry->module=ConstantString("DNG");
   (void) RegisterMagickInfo(entry);
-  entry=SetMagickInfo("NEF");
+  entry=AcquireMagickInfo("DNG","MEF","Mamiya Raw Image File");
   entry->decoder=(DecodeImageHandler *) ReadDNGImage;
-  entry->blob_support=MagickFalse;
-  entry->seekable_stream=MagickTrue;
+  entry->flags^=CoderBlobSupportFlag;
+  entry->flags|=CoderSeekableStreamFlag;
   entry->format_type=ExplicitFormatType;
-  entry->description=ConstantString("Nikon Digital SLR Camera Raw Image File");
-  entry->module=ConstantString("DNG");
   (void) RegisterMagickInfo(entry);
-  entry=SetMagickInfo("ORF");
+  entry=AcquireMagickInfo("DNG","MRW","Sony (Minolta) Raw Image File");
   entry->decoder=(DecodeImageHandler *) ReadDNGImage;
-  entry->blob_support=MagickFalse;
-  entry->seekable_stream=MagickTrue;
+  entry->flags^=CoderBlobSupportFlag;
+  entry->flags|=CoderSeekableStreamFlag;
   entry->format_type=ExplicitFormatType;
-  entry->description=ConstantString("Olympus Digital Camera Raw Image File");
-  entry->module=ConstantString("DNG");
   (void) RegisterMagickInfo(entry);
-  entry=SetMagickInfo("PEF");
+  entry=AcquireMagickInfo("DNG","NEF","Nikon Digital SLR Camera Raw Image File");
   entry->decoder=(DecodeImageHandler *) ReadDNGImage;
-  entry->blob_support=MagickFalse;
-  entry->seekable_stream=MagickTrue;
+  entry->flags^=CoderBlobSupportFlag;
+  entry->flags|=CoderSeekableStreamFlag;
   entry->format_type=ExplicitFormatType;
-  entry->description=ConstantString("Pentax Electronic File");
-  entry->module=ConstantString("DNG");
   (void) RegisterMagickInfo(entry);
-  entry=SetMagickInfo("RAF");
+  entry=AcquireMagickInfo("DNG","NRW","Nikon Digital SLR Camera Raw Image File");
   entry->decoder=(DecodeImageHandler *) ReadDNGImage;
-  entry->blob_support=MagickFalse;
-  entry->seekable_stream=MagickTrue;
+  entry->flags^=CoderBlobSupportFlag;
+  entry->flags|=CoderSeekableStreamFlag;
   entry->format_type=ExplicitFormatType;
-  entry->description=ConstantString("Fuji CCD-RAW Graphic File");
-  entry->module=ConstantString("DNG");
   (void) RegisterMagickInfo(entry);
-  entry=SetMagickInfo("SRF");
+  entry=AcquireMagickInfo("DNG","ORF","Olympus Digital Camera Raw Image File");
   entry->decoder=(DecodeImageHandler *) ReadDNGImage;
-  entry->blob_support=MagickFalse;
-  entry->seekable_stream=MagickTrue;
+  entry->flags^=CoderBlobSupportFlag;
+  entry->flags|=CoderSeekableStreamFlag;
   entry->format_type=ExplicitFormatType;
-  entry->description=ConstantString("Sony Raw Format");
-  entry->module=ConstantString("DNG");
   (void) RegisterMagickInfo(entry);
-  entry=SetMagickInfo("SR2");
+  entry=AcquireMagickInfo("DNG","PEF","Pentax Electronic File");
   entry->decoder=(DecodeImageHandler *) ReadDNGImage;
-  entry->blob_support=MagickFalse;
-  entry->seekable_stream=MagickTrue;
+  entry->flags^=CoderBlobSupportFlag;
+  entry->flags|=CoderSeekableStreamFlag;
   entry->format_type=ExplicitFormatType;
-  entry->description=ConstantString("Sony Raw Format 2");
-  entry->module=ConstantString("DNG");
   (void) RegisterMagickInfo(entry);
-  entry=SetMagickInfo("X3F");
+  entry=AcquireMagickInfo("DNG","RAF","Fuji CCD-RAW Graphic File");
   entry->decoder=(DecodeImageHandler *) ReadDNGImage;
-  entry->blob_support=MagickFalse;
-  entry->seekable_stream=MagickTrue;
+  entry->flags^=CoderBlobSupportFlag;
+  entry->flags|=CoderSeekableStreamFlag;
   entry->format_type=ExplicitFormatType;
-  entry->description=ConstantString("Sigma Camera RAW Picture File");
-  entry->module=ConstantString("DNG");
+  (void) RegisterMagickInfo(entry);
+  entry=AcquireMagickInfo("DNG","RAW","Raw");
+  entry->decoder=(DecodeImageHandler *) ReadDNGImage;
+  entry->flags^=CoderBlobSupportFlag;
+  entry->flags|=CoderSeekableStreamFlag;
+  entry->format_type=ExplicitFormatType;
+  (void) RegisterMagickInfo(entry);
+  entry=AcquireMagickInfo("DNG","RMF","Raw Media Format");
+  entry->decoder=(DecodeImageHandler *) ReadDNGImage;
+  entry->flags^=CoderBlobSupportFlag;
+  entry->flags|=CoderSeekableStreamFlag;
+  entry->format_type=ExplicitFormatType;
+  (void) RegisterMagickInfo(entry);
+  entry=AcquireMagickInfo("DNG","RW2","Panasonic Lumix Raw Image");
+  entry->decoder=(DecodeImageHandler *) ReadDNGImage;
+  entry->flags^=CoderBlobSupportFlag;
+  entry->flags|=CoderSeekableStreamFlag;
+  entry->format_type=ExplicitFormatType;
+  (void) RegisterMagickInfo(entry);
+  entry=AcquireMagickInfo("DNG","SRF","Sony Raw Format");
+  entry->decoder=(DecodeImageHandler *) ReadDNGImage;
+  entry->flags^=CoderBlobSupportFlag;
+  entry->flags|=CoderSeekableStreamFlag;
+  entry->format_type=ExplicitFormatType;
+  (void) RegisterMagickInfo(entry);
+  entry=AcquireMagickInfo("DNG","SR2","Sony Raw Format 2");
+  entry->decoder=(DecodeImageHandler *) ReadDNGImage;
+  entry->flags^=CoderBlobSupportFlag;
+  entry->flags|=CoderSeekableStreamFlag;
+  entry->format_type=ExplicitFormatType;
+  (void) RegisterMagickInfo(entry);
+  entry=AcquireMagickInfo("DNG","X3F","Sigma Camera RAW Picture File");
+  entry->decoder=(DecodeImageHandler *) ReadDNGImage;
+  entry->flags^=CoderBlobSupportFlag;
+  entry->flags|=CoderSeekableStreamFlag;
+  entry->format_type=ExplicitFormatType;
   (void) RegisterMagickInfo(entry);
   return(MagickImageCoderSignature);
 }
@@ -402,13 +405,19 @@ ModuleExport void UnregisterDNGImage(void)
   (void) UnregisterMagickInfo("X3F");
   (void) UnregisterMagickInfo("SR2");
   (void) UnregisterMagickInfo("SRF");
+  (void) UnregisterMagickInfo("RW2");
+  (void) UnregisterMagickInfo("RMF");
   (void) UnregisterMagickInfo("RAF");
   (void) UnregisterMagickInfo("PEF");
   (void) UnregisterMagickInfo("ORF");
+  (void) UnregisterMagickInfo("NRW");
   (void) UnregisterMagickInfo("NEF");
   (void) UnregisterMagickInfo("MRW");
+  (void) UnregisterMagickInfo("MEF");
   (void) UnregisterMagickInfo("K25");
   (void) UnregisterMagickInfo("KDC");
+  (void) UnregisterMagickInfo("IIQ");
+  (void) UnregisterMagickInfo("ERF");
   (void) UnregisterMagickInfo("DCR");
   (void) UnregisterMagickInfo("CRW");
   (void) UnregisterMagickInfo("CR2");

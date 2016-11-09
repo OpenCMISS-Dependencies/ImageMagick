@@ -13,11 +13,11 @@
 %                       Read/Write MPEG Image Format                          %
 %                                                                             %
 %                              Software Design                                %
-%                                John Cristy                                  %
+%                                   Cristy                                    %
 %                                 July 1999                                   %
 %                                                                             %
 %                                                                             %
-%  Copyright 1999-2011 ImageMagick Studio LLC, a non-profit organization      %
+%  Copyright 1999-2016 ImageMagick Studio LLC, a non-profit organization      %
 %  dedicated to making software imaging solutions freely available.           %
 %                                                                             %
 %  You may not use this file except in compliance with the License.  You may  %
@@ -38,34 +38,35 @@
 /*
   Include declarations.
 */
-#include "magick/studio.h"
-#include "magick/blob.h"
-#include "magick/blob-private.h"
-#include "magick/constitute.h"
-#include "magick/delegate.h"
-#include "magick/exception.h"
-#include "magick/exception-private.h"
-#include "magick/geometry.h"
-#include "magick/image.h"
-#include "magick/image-private.h"
-#include "magick/layer.h"
-#include "magick/list.h"
-#include "magick/log.h"
-#include "magick/magick.h"
-#include "magick/memory_.h"
-#include "magick/resource_.h"
-#include "magick/quantum-private.h"
-#include "magick/static.h"
-#include "magick/string_.h"
-#include "magick/module.h"
-#include "magick/transform.h"
-#include "magick/utility.h"
+#include "MagickCore/studio.h"
+#include "MagickCore/blob.h"
+#include "MagickCore/blob-private.h"
+#include "MagickCore/constitute.h"
+#include "MagickCore/delegate.h"
+#include "MagickCore/exception.h"
+#include "MagickCore/exception-private.h"
+#include "MagickCore/geometry.h"
+#include "MagickCore/image.h"
+#include "MagickCore/image-private.h"
+#include "MagickCore/layer.h"
+#include "MagickCore/list.h"
+#include "MagickCore/log.h"
+#include "MagickCore/magick.h"
+#include "MagickCore/memory_.h"
+#include "MagickCore/resource_.h"
+#include "MagickCore/quantum-private.h"
+#include "MagickCore/static.h"
+#include "MagickCore/string_.h"
+#include "MagickCore/module.h"
+#include "MagickCore/transform.h"
+#include "MagickCore/utility.h"
+#include "MagickCore/utility-private.h"
 
 /*
   Forward declarations.
 */
 static MagickBooleanType
-  WriteMPEGImage(const ImageInfo *image_info,Image *image);
+  WriteMPEGImage(const ImageInfo *,Image *,ExceptionInfo *);
 
 /*
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -181,13 +182,13 @@ static Image *ReadMPEGImage(const ImageInfo *image_info,
     Open image file.
   */
   assert(image_info != (const ImageInfo *) NULL);
-  assert(image_info->signature == MagickSignature);
+  assert(image_info->signature == MagickCoreSignature);
   if (image_info->debug != MagickFalse)
     (void) LogMagickEvent(TraceEvent,GetMagickModule(),"%s",
       image_info->filename);
   assert(exception != (ExceptionInfo *) NULL);
-  assert(exception->signature == MagickSignature);
-  image=AcquireImage(image_info);
+  assert(exception->signature == MagickCoreSignature);
+  image=AcquireImage(image_info,exception);
   status=OpenBlob(image_info,image,ReadBinaryBlobMode,exception);
   if (status == MagickFalse)
     {
@@ -200,10 +201,10 @@ static Image *ReadMPEGImage(const ImageInfo *image_info,
     Convert MPEG to PAM with delegate.
   */
   read_info=CloneImageInfo(image_info);
-  image=AcquireImage(image_info);
+  image=AcquireImage(image_info,exception);
   (void) InvokeDelegate(read_info,image,"mpeg:decode",(char *) NULL,exception);
   image=DestroyImage(image);
-  (void) FormatLocaleString(read_info->filename,MaxTextExtent,"%s.%s",
+  (void) FormatLocaleString(read_info->filename,MagickPathExtent,"%s.%s",
     read_info->unique,ReadMPEGIntermediateFormat);
   images=ReadImage(read_info,exception);
   (void) RelinquishUniqueFileResource(read_info->filename);
@@ -239,68 +240,58 @@ ModuleExport size_t RegisterMPEGImage(void)
   MagickInfo
     *entry;
 
-  entry=SetMagickInfo("AVI");
+  entry=AcquireMagickInfo("MPEG","AVI","Microsoft Audio/Visual Interleaved");
   entry->decoder=(DecodeImageHandler *) ReadMPEGImage;
   entry->magick=(IsImageFormatHandler *) IsAVI;
-  entry->blob_support=MagickFalse;
-  entry->description=ConstantString("Microsoft Audio/Visual Interleaved");
-  entry->module=ConstantString("MPEG");
+  entry->flags^=CoderBlobSupportFlag;
   (void) RegisterMagickInfo(entry);
-  entry=SetMagickInfo("MOV");
+  entry=AcquireMagickInfo("MPEG","MKV","Multimedia Container");
   entry->decoder=(DecodeImageHandler *) ReadMPEGImage;
   entry->encoder=(EncodeImageHandler *) WriteMPEGImage;
   entry->magick=(IsImageFormatHandler *) IsMPEG;
-  entry->blob_support=MagickFalse;
-  entry->description=ConstantString("MPEG Video Stream");
-  entry->module=ConstantString("MPEG");
+  entry->flags^=CoderBlobSupportFlag;
   (void) RegisterMagickInfo(entry);
-  entry=SetMagickInfo("MPEG");
+  entry=AcquireMagickInfo("MPEG","MOV","MPEG Video Stream");
   entry->decoder=(DecodeImageHandler *) ReadMPEGImage;
   entry->encoder=(EncodeImageHandler *) WriteMPEGImage;
   entry->magick=(IsImageFormatHandler *) IsMPEG;
-  entry->blob_support=MagickFalse;
-  entry->description=ConstantString("MPEG Video Stream");
-  entry->module=ConstantString("MPEG");
+  entry->flags^=CoderBlobSupportFlag;
   (void) RegisterMagickInfo(entry);
-  entry=SetMagickInfo("MPG");
+  entry=AcquireMagickInfo("MPEG","MPEG","MPEG Video Stream");
   entry->decoder=(DecodeImageHandler *) ReadMPEGImage;
   entry->encoder=(EncodeImageHandler *) WriteMPEGImage;
   entry->magick=(IsImageFormatHandler *) IsMPEG;
-  entry->blob_support=MagickFalse;
-  entry->description=ConstantString("MPEG Video Stream");
-  entry->module=ConstantString("MPEG");
+  entry->flags^=CoderBlobSupportFlag;
   (void) RegisterMagickInfo(entry);
-  entry=SetMagickInfo("MP4");
+  entry=AcquireMagickInfo("MPEG","MPG","MPEG Video Stream");
   entry->decoder=(DecodeImageHandler *) ReadMPEGImage;
   entry->encoder=(EncodeImageHandler *) WriteMPEGImage;
   entry->magick=(IsImageFormatHandler *) IsMPEG;
-  entry->blob_support=MagickFalse;
-  entry->description=ConstantString("MPEG-4 Video Stream");
-  entry->module=ConstantString("MPEG");
+  entry->flags^=CoderBlobSupportFlag;
   (void) RegisterMagickInfo(entry);
-  entry=SetMagickInfo("M2V");
+  entry=AcquireMagickInfo("MPEG","MP4","MPEG-4 Video Stream");
   entry->decoder=(DecodeImageHandler *) ReadMPEGImage;
   entry->encoder=(EncodeImageHandler *) WriteMPEGImage;
   entry->magick=(IsImageFormatHandler *) IsMPEG;
-  entry->blob_support=MagickFalse;
-  entry->description=ConstantString("MPEG Video Stream");
-  entry->module=ConstantString("MPEG");
+  entry->flags^=CoderBlobSupportFlag;
   (void) RegisterMagickInfo(entry);
-  entry=SetMagickInfo("M4V");
+  entry=AcquireMagickInfo("MPEG","M2V","MPEG Video Stream");
   entry->decoder=(DecodeImageHandler *) ReadMPEGImage;
   entry->encoder=(EncodeImageHandler *) WriteMPEGImage;
   entry->magick=(IsImageFormatHandler *) IsMPEG;
-  entry->blob_support=MagickFalse;
-  entry->description=ConstantString("Raw MPEG-4 Video");
-  entry->module=ConstantString("MPEG");
+  entry->flags^=CoderBlobSupportFlag;
   (void) RegisterMagickInfo(entry);
-  entry=SetMagickInfo("WMV");
+  entry=AcquireMagickInfo("MPEG","M4V","Raw MPEG-4 Video");
   entry->decoder=(DecodeImageHandler *) ReadMPEGImage;
   entry->encoder=(EncodeImageHandler *) WriteMPEGImage;
   entry->magick=(IsImageFormatHandler *) IsMPEG;
-  entry->blob_support=MagickFalse;
-  entry->description=ConstantString("Windows Media Video");
-  entry->module=ConstantString("MPEG");
+  entry->flags^=CoderBlobSupportFlag;
+  (void) RegisterMagickInfo(entry);
+  entry=AcquireMagickInfo("MPEG","WMV","Windows Media Video");
+  entry->decoder=(DecodeImageHandler *) ReadMPEGImage;
+  entry->encoder=(EncodeImageHandler *) WriteMPEGImage;
+  entry->magick=(IsImageFormatHandler *) IsMPEG;
+  entry->flags^=CoderBlobSupportFlag;
   (void) RegisterMagickInfo(entry);
   return(MagickImageCoderSignature);
 }
@@ -327,12 +318,13 @@ ModuleExport size_t RegisterMPEGImage(void)
 ModuleExport void UnregisterMPEGImage(void)
 {
   (void) UnregisterMagickInfo("WMV");
+  (void) UnregisterMagickInfo("MOV");
   (void) UnregisterMagickInfo("M4V");
   (void) UnregisterMagickInfo("M2V");
   (void) UnregisterMagickInfo("MP4");
   (void) UnregisterMagickInfo("MPG");
   (void) UnregisterMagickInfo("MPEG");
-  (void) UnregisterMagickInfo("MOV");
+  (void) UnregisterMagickInfo("MKV");
   (void) UnregisterMagickInfo("AVI");
 }
 
@@ -354,7 +346,7 @@ ModuleExport void UnregisterMPEGImage(void)
 %  The format of the WriteMPEGImage method is:
 %
 %      MagickBooleanType WriteMPEGImage(const ImageInfo *image_info,
-%        Image *image)
+%        Image *image,ExceptionInfo *exception)
 %
 %  A description of each parameter follows.
 %
@@ -362,22 +354,9 @@ ModuleExport void UnregisterMPEGImage(void)
 %
 %    o image:  The image.
 %
+%    o exception: return any errors or warnings in this structure.
+%
 */
-
-static inline double MagickMax(const double x,const double y)
-{
-  if (x > y)
-    return(x);
-  return(y);
-}
-
-static inline double MagickMin(const double x,const double y)
-{
-  if (x < y)
-    return(x);
-  return(y);
-}
-
 static MagickBooleanType CopyDelegateFile(const char *source,
   const char *destination)
 {
@@ -410,22 +389,22 @@ static MagickBooleanType CopyDelegateFile(const char *source,
   assert(source != (const char *) NULL);
   assert(destination != (char *) NULL);
   status=GetPathAttributes(destination,&attributes);
-  if ((status != MagickFalse) && (attributes.st_size != 0))
+  if ((status != MagickFalse) && (attributes.st_size > 0))
     return(MagickTrue);
   /*
     Copy source file to destination.
   */
-  destination_file=open(destination,O_WRONLY | O_BINARY | O_CREAT,S_MODE);
+  destination_file=open_utf8(destination,O_WRONLY | O_BINARY | O_CREAT,S_MODE);
   if (destination_file == -1)
     return(MagickFalse);
-  source_file=open(source,O_RDONLY | O_BINARY);
+  source_file=open_utf8(source,O_RDONLY | O_BINARY,0);
   if (source_file == -1)
     {
       (void) close(destination_file);
       return(MagickFalse);
     }
   quantum=(size_t) MagickMaxBufferExtent;
-  if ((fstat(source_file,&attributes) == 0) && (attributes.st_size != 0))
+  if ((fstat(source_file,&attributes) == 0) && (attributes.st_size > 0))
     quantum=(size_t) MagickMin((double) attributes.st_size,
       MagickMaxBufferExtent);
   buffer=(unsigned char *) AcquireQuantumMemory(quantum,sizeof(*buffer));
@@ -453,13 +432,13 @@ static MagickBooleanType CopyDelegateFile(const char *source,
 }
 
 static MagickBooleanType WriteMPEGImage(const ImageInfo *image_info,
-  Image *image)
+  Image *image,ExceptionInfo *exception)
 {
 #define WriteMPEGIntermediateFormat "jpg"
 
   char
-    basename[MaxTextExtent],
-    filename[MaxTextExtent];
+    basename[MagickPathExtent],
+    filename[MagickPathExtent];
 
   double
     delay;
@@ -494,32 +473,35 @@ static MagickBooleanType WriteMPEGImage(const ImageInfo *image_info,
     Open output image file.
   */
   assert(image_info != (const ImageInfo *) NULL);
-  assert(image_info->signature == MagickSignature);
+  assert(image_info->signature == MagickCoreSignature);
   assert(image != (Image *) NULL);
-  assert(image->signature == MagickSignature);
+  assert(image->signature == MagickCoreSignature);
   if (image->debug != MagickFalse)
     (void) LogMagickEvent(TraceEvent,GetMagickModule(),"%s",image->filename);
-  status=OpenBlob(image_info,image,WriteBinaryBlobMode,&image->exception);
+  assert(exception != (ExceptionInfo *) NULL);
+  assert(exception->signature == MagickCoreSignature);
+  status=OpenBlob(image_info,image,WriteBinaryBlobMode,exception);
   if (status == MagickFalse)
     return(status);
   (void) CloseBlob(image);
   /*
     Write intermediate files.
   */
-  coalesce_image=CoalesceImages(image,&image->exception);
+  coalesce_image=CoalesceImages(image,exception);
   if (coalesce_image == (Image *) NULL)
     return(MagickFalse);
   file=AcquireUniqueFileResource(basename);
   if (file != -1)
     file=close(file)-1;
-  (void) FormatLocaleString(coalesce_image->filename,MaxTextExtent,"%s",
+  (void) FormatLocaleString(coalesce_image->filename,MagickPathExtent,"%s",
     basename);
   count=0;
   write_info=CloneImageInfo(image_info);
+  *write_info->magick='\0';
   for (p=coalesce_image; p != (Image *) NULL; p=GetNextImageInList(p))
   {
     char
-      previous_image[MaxTextExtent];
+      previous_image[MagickPathExtent];
 
     blob=(unsigned char *) NULL;
     length=0;
@@ -537,31 +519,31 @@ static MagickBooleanType WriteMPEGImage(const ImageInfo *image_info,
           Image
             *frame;
 
-          (void) FormatLocaleString(p->filename,MaxTextExtent,"%s%.20g.%s",
+          (void) FormatLocaleString(p->filename,MagickPathExtent,"%s%.20g.%s",
             basename,(double) p->scene,WriteMPEGIntermediateFormat);
-          (void) FormatLocaleString(filename,MaxTextExtent,"%s%.20g.%s",
+          (void) FormatLocaleString(filename,MagickPathExtent,"%s%.20g.%s",
             basename,(double) p->scene,WriteMPEGIntermediateFormat);
-          (void) FormatLocaleString(previous_image,MaxTextExtent,
+          (void) FormatLocaleString(previous_image,MagickPathExtent,
             "%s%.20g.%s",basename,(double) p->scene,
             WriteMPEGIntermediateFormat);
-          frame=CloneImage(p,0,0,MagickTrue,&p->exception);
+          frame=CloneImage(p,0,0,MagickTrue,exception);
           if (frame == (Image *) NULL)
             break;
-          status=WriteImage(write_info,frame);
+          status=WriteImage(write_info,frame,exception);
           frame=DestroyImage(frame);
           break;
         }
         case 1:
         {
           blob=(unsigned char *) FileToBlob(previous_image,~0UL,&length,
-            &image->exception);
+            exception);
         }
         default:
         {
-          (void) FormatLocaleString(filename,MaxTextExtent,"%s%.20g.%s",
+          (void) FormatLocaleString(filename,MagickPathExtent,"%s%.20g.%s",
             basename,(double) p->scene,WriteMPEGIntermediateFormat);
           if (length > 0)
-            status=BlobToFile(filename,blob,length,&image->exception);
+            status=BlobToFile(filename,blob,length,exception);
           break;
         }
       }
@@ -588,14 +570,14 @@ static MagickBooleanType WriteMPEGImage(const ImageInfo *image_info,
     Convert JPEG to MPEG.
   */
   (void) CopyMagickString(coalesce_image->magick_filename,basename,
-    MaxTextExtent);
-  (void) CopyMagickString(coalesce_image->filename,basename,MaxTextExtent);
+    MagickPathExtent);
+  (void) CopyMagickString(coalesce_image->filename,basename,MagickPathExtent);
   GetPathComponent(image_info->filename,ExtensionPath,coalesce_image->magick);
   if (*coalesce_image->magick == '\0')
-    (void) CopyMagickString(coalesce_image->magick,image->magick,MaxTextExtent);
+    (void) CopyMagickString(coalesce_image->magick,image->magick,MagickPathExtent);
   status=InvokeDelegate(write_info,coalesce_image,(char *) NULL,"mpeg:encode",
-    &image->exception);
-  (void) FormatLocaleString(write_info->filename,MaxTextExtent,"%s.%s",
+    exception);
+  (void) FormatLocaleString(write_info->filename,MagickPathExtent,"%s.%s",
     write_info->unique,coalesce_image->magick);
   status=CopyDelegateFile(write_info->filename,image->filename);
   (void) RelinquishUniqueFileResource(write_info->filename);
@@ -609,11 +591,11 @@ static MagickBooleanType WriteMPEGImage(const ImageInfo *image_info,
     delay=100.0*p->delay/MagickMax(1.0*p->ticks_per_second,1.0);
     for (i=0; i < (ssize_t) MagickMax((1.0*delay+1.0)/3.0,1.0); i++)
     {
-      (void) FormatLocaleString(p->filename,MaxTextExtent,"%s%.20g.%s",
+      (void) FormatLocaleString(p->filename,MagickPathExtent,"%s%.20g.%s",
         basename,(double) count++,WriteMPEGIntermediateFormat);
       (void) RelinquishUniqueFileResource(p->filename);
     }
-    (void) CopyMagickString(p->filename,image_info->filename,MaxTextExtent);
+    (void) CopyMagickString(p->filename,image_info->filename,MagickPathExtent);
   }
   (void) RelinquishUniqueFileResource(basename);
   coalesce_image=DestroyImageList(coalesce_image);

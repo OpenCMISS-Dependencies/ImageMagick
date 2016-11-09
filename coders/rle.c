@@ -13,11 +13,11 @@
 %                          Read URT RLE Image Format                          %
 %                                                                             %
 %                              Software Design                                %
-%                                John Cristy                                  %
+%                                   Cristy                                    %
 %                                 July 1992                                   %
 %                                                                             %
 %                                                                             %
-%  Copyright 1999-2011 ImageMagick Studio LLC, a non-profit organization      %
+%  Copyright 1999-2016 ImageMagick Studio LLC, a non-profit organization      %
 %  dedicated to making software imaging solutions freely available.           %
 %                                                                             %
 %  You may not use this file except in compliance with the License.  You may  %
@@ -39,26 +39,28 @@
 /*
   Include declarations.
 */
-#include "magick/studio.h"
-#include "magick/property.h"
-#include "magick/blob.h"
-#include "magick/blob-private.h"
-#include "magick/cache.h"
-#include "magick/colormap.h"
-#include "magick/exception.h"
-#include "magick/exception-private.h"
-#include "magick/image.h"
-#include "magick/image-private.h"
-#include "magick/list.h"
-#include "magick/magick.h"
-#include "magick/memory_.h"
-#include "magick/monitor.h"
-#include "magick/monitor-private.h"
-#include "magick/quantum-private.h"
-#include "magick/pixel.h"
-#include "magick/static.h"
-#include "magick/string_.h"
-#include "magick/module.h"
+#include "MagickCore/studio.h"
+#include "MagickCore/blob.h"
+#include "MagickCore/blob-private.h"
+#include "MagickCore/cache.h"
+#include "MagickCore/colormap.h"
+#include "MagickCore/colormap-private.h"
+#include "MagickCore/exception.h"
+#include "MagickCore/exception-private.h"
+#include "MagickCore/image.h"
+#include "MagickCore/image-private.h"
+#include "MagickCore/list.h"
+#include "MagickCore/magick.h"
+#include "MagickCore/memory_.h"
+#include "MagickCore/monitor.h"
+#include "MagickCore/monitor-private.h"
+#include "MagickCore/pixel-accessor.h"
+#include "MagickCore/pixel.h"
+#include "MagickCore/property.h"
+#include "MagickCore/quantum-private.h"
+#include "MagickCore/static.h"
+#include "MagickCore/string_.h"
+#include "MagickCore/module.h"
 
 /*
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -148,13 +150,16 @@ static Image *ReadRLEImage(const ImageInfo *image_info,ExceptionInfo *exception)
   MagickSizeType
     number_pixels;
 
-  register IndexPacket
-    *indexes;
+  MemoryInfo
+    *pixel_info;
+
+  Quantum
+    index;
 
   register ssize_t
     x;
 
-  register PixelPacket
+  register Quantum
     *q;
 
   register ssize_t
@@ -168,10 +173,13 @@ static Image *ReadRLEImage(const ImageInfo *image_info,ExceptionInfo *exception)
     map_length,
     number_colormaps,
     number_planes,
-    one;
+    number_planes_filled,
+    one,
+    pixel_info_length;
 
   ssize_t
     count,
+    offset,
     y;
 
   unsigned char
@@ -179,48 +187,49 @@ static Image *ReadRLEImage(const ImageInfo *image_info,ExceptionInfo *exception)
     *colormap,
     pixel,
     plane,
-    *rle_pixels;
+    *pixels;
 
   /*
     Open image file.
   */
   assert(image_info != (const ImageInfo *) NULL);
-  assert(image_info->signature == MagickSignature);
+  assert(image_info->signature == MagickCoreSignature);
   if (image_info->debug != MagickFalse)
     (void) LogMagickEvent(TraceEvent,GetMagickModule(),"%s",
       image_info->filename);
   assert(exception != (ExceptionInfo *) NULL);
-  assert(exception->signature == MagickSignature);
-  image=AcquireImage(image_info);
+  assert(exception->signature == MagickCoreSignature);
+  image=AcquireImage(image_info,exception);
   status=OpenBlob(image_info,image,ReadBinaryBlobMode,exception);
   if (status == MagickFalse)
-    {
-      image=DestroyImageList(image);
-      return((Image *) NULL);
-    }
+    return(DestroyImageList(image));
   /*
     Determine if this a RLE file.
   */
   count=ReadBlob(image,2,(unsigned char *) magick);
-  if ((count == 0) || (memcmp(magick,"\122\314",2) != 0))
+  if ((count != 2) || (memcmp(magick,"\122\314",2) != 0))
     ThrowReaderException(CorruptImageError,"ImproperImageHeader");
   do
   {
     /*
       Read image header.
     */
-    (void) ReadBlobLSBShort(image);
-    (void) ReadBlobLSBShort(image);
+    image->page.x=ReadBlobLSBShort(image);
+    image->page.y=ReadBlobLSBShort(image);
     image->columns=ReadBlobLSBShort(image);
     image->rows=ReadBlobLSBShort(image);
     flags=(MagickStatusType) ReadBlobByte(image);
-    image->matte=flags & 0x04 ? MagickTrue : MagickFalse;
-    number_planes=1UL*ReadBlobByte(image);
-    bits_per_pixel=1UL*ReadBlobByte(image);
-    number_colormaps=1UL*ReadBlobByte(image);
+    image->alpha_trait=flags & 0x04 ? BlendPixelTrait : UndefinedPixelTrait;
+    number_planes=(size_t) ReadBlobByte(image);
+    bits_per_pixel=(size_t) ReadBlobByte(image);
+    number_colormaps=(size_t) ReadBlobByte(image);
+    map_length=(unsigned char) ReadBlobByte(image);
+    if (map_length >= 32)
+      ThrowReaderException(CorruptImageError,"ImproperImageHeader");
     one=1;
-    map_length=one << ReadBlobByte(image);
-    if ((number_planes == 0) || (number_planes == 2) || (bits_per_pixel != 8) ||
+    map_length=one << map_length;
+    if ((number_planes == 0) || (number_planes == 2) ||
+        ((flags & 0x04) && (number_colormaps > 254)) || (bits_per_pixel != 8) ||
         (image->columns == 0))
       ThrowReaderException(CorruptImageError,"ImproperImageHeader");
     if (flags & 0x02)
@@ -243,6 +252,12 @@ static Image *ReadRLEImage(const ImageInfo *image_info,ExceptionInfo *exception)
       }
     if ((number_planes & 0x01) == 0)
       (void) ReadBlobByte(image);
+    if (EOFBlob(image) != MagickFalse)
+      {
+        ThrowFileException(exception,CorruptImageError,"UnexpectedEndOfFile",
+          image->filename);
+        break;
+      }
     colormap=(unsigned char *) NULL;
     if (number_colormaps != 0)
       {
@@ -250,7 +265,7 @@ static Image *ReadRLEImage(const ImageInfo *image_info,ExceptionInfo *exception)
           Read image colormaps.
         */
         colormap=(unsigned char *) AcquireQuantumMemory(number_colormaps,
-          map_length*sizeof(*colormap));
+          3*map_length*sizeof(*colormap));
         if (colormap == (unsigned char *) NULL)
           ThrowReaderException(ResourceLimitError,"MemoryAllocationFailed");
         p=colormap;
@@ -277,27 +292,42 @@ static Image *ReadRLEImage(const ImageInfo *image_info,ExceptionInfo *exception)
               ThrowReaderException(ResourceLimitError,"MemoryAllocationFailed");
             count=ReadBlob(image,length-1,(unsigned char *) comment);
             comment[length-1]='\0';
-            (void) SetImageProperty(image,"comment",comment);
+            (void) SetImageProperty(image,"comment",comment,exception);
             comment=DestroyString(comment);
             if ((length & 0x01) == 0)
               (void) ReadBlobByte(image);
           }
       }
+    if (EOFBlob(image) != MagickFalse)
+      {
+        ThrowFileException(exception,CorruptImageError,"UnexpectedEndOfFile",
+          image->filename);
+        break;
+      }
     if ((image_info->ping != MagickFalse) && (image_info->number_scenes != 0))
       if (image->scene >= (image_info->scene+image_info->number_scenes-1))
         break;
+    status=SetImageExtent(image,image->columns,image->rows,exception);
+    if (status == MagickFalse)
+      return(DestroyImageList(image));
     /*
       Allocate RLE pixels.
     */
-    if (image->matte != MagickFalse)
+    if (image->alpha_trait != UndefinedPixelTrait)
       number_planes++;
     number_pixels=(MagickSizeType) image->columns*image->rows;
-    if ((number_pixels*number_planes) != (size_t) (number_pixels*number_planes))
+    number_planes_filled=(number_planes % 2 == 0) ? number_planes :
+      number_planes+1;
+    if ((number_pixels*number_planes_filled) != (size_t) (number_pixels*
+         number_planes_filled))
       ThrowReaderException(ResourceLimitError,"MemoryAllocationFailed");
-    rle_pixels=(unsigned char *) AcquireQuantumMemory(image->columns,
-      image->rows*number_planes*sizeof(*rle_pixels));
-    if (rle_pixels == (unsigned char *) NULL)
+    pixel_info=AcquireVirtualMemory(image->columns,image->rows*
+      MagickMax(number_planes_filled,4)*sizeof(*pixels));
+    if (pixel_info == (MemoryInfo *) NULL)
       ThrowReaderException(ResourceLimitError,"MemoryAllocationFailed");
+    pixel_info_length=image->columns*image->rows*
+      MagickMax(number_planes_filled,4);
+    pixels=(unsigned char *) GetVirtualMemoryBlob(pixel_info);
     if ((flags & 0x01) && !(flags & 0x02))
       {
         ssize_t
@@ -306,10 +336,10 @@ static Image *ReadRLEImage(const ImageInfo *image_info,ExceptionInfo *exception)
         /*
           Set background color.
         */
-        p=rle_pixels;
+        p=pixels;
         for (i=0; i < (ssize_t) number_pixels; i++)
         {
-          if (image->matte == MagickFalse)
+          if (image->alpha_trait == UndefinedPixelTrait)
             for (j=0; j < (ssize_t) number_planes; j++)
               *p++=background_color[j];
           else
@@ -335,7 +365,7 @@ static Image *ReadRLEImage(const ImageInfo *image_info,ExceptionInfo *exception)
         {
           operand=ReadBlobByte(image);
           if (opcode & 0x40)
-            operand=(int) ReadBlobLSBShort(image);
+            operand=ReadBlobLSBSignedShort(image);
           x=0;
           y+=operand;
           break;
@@ -353,7 +383,7 @@ static Image *ReadRLEImage(const ImageInfo *image_info,ExceptionInfo *exception)
         {
           operand=ReadBlobByte(image);
           if (opcode & 0x40)
-            operand=(int) ReadBlobLSBShort(image);
+            operand=ReadBlobLSBSignedShort(image);
           x+=operand;
           break;
         }
@@ -361,10 +391,19 @@ static Image *ReadRLEImage(const ImageInfo *image_info,ExceptionInfo *exception)
         {
           operand=ReadBlobByte(image);
           if (opcode & 0x40)
-            operand=(int) ReadBlobLSBShort(image);
-          p=rle_pixels+((image->rows-y-1)*image->columns*number_planes)+
-            x*number_planes+plane;
+            operand=ReadBlobLSBSignedShort(image);
+          offset=((image->rows-y-1)*image->columns*number_planes)+x*
+            number_planes+plane;
           operand++;
+          if ((offset < 0) ||
+              (offset+((size_t) operand*number_planes) > pixel_info_length))
+            {
+              if (number_colormaps != 0)
+                colormap=(unsigned char *) RelinquishMagickMemory(colormap);
+              pixel_info=RelinquishVirtualMemory(pixel_info);
+              ThrowReaderException(CorruptImageError,"UnableToReadImageData");
+            }
+          p=pixels+offset;
           for (i=0; i < (ssize_t) operand; i++)
           {
             pixel=(unsigned char) ReadBlobByte(image);
@@ -382,12 +421,21 @@ static Image *ReadRLEImage(const ImageInfo *image_info,ExceptionInfo *exception)
         {
           operand=ReadBlobByte(image);
           if (opcode & 0x40)
-            operand=(int) ReadBlobLSBShort(image);
+            operand=ReadBlobLSBSignedShort(image);
           pixel=(unsigned char) ReadBlobByte(image);
           (void) ReadBlobByte(image);
+          offset=((image->rows-y-1)*image->columns*number_planes)+x*
+            number_planes+plane;
           operand++;
-          p=rle_pixels+((image->rows-y-1)*image->columns*number_planes)+
-            x*number_planes+plane;
+          if ((offset < 0) ||
+              (offset+((size_t) operand*number_planes) > pixel_info_length))
+            {
+              if (number_colormaps != 0)
+                colormap=(unsigned char *) RelinquishMagickMemory(colormap);
+              pixel_info=RelinquishVirtualMemory(pixel_info);
+              ThrowReaderException(CorruptImageError,"UnableToReadImageData");
+            }
+          p=pixels+offset;
           for (i=0; i < (ssize_t) operand; i++)
           {
             if ((y < (ssize_t) image->rows) &&
@@ -412,11 +460,13 @@ static Image *ReadRLEImage(const ImageInfo *image_info,ExceptionInfo *exception)
           Apply colormap affineation to image.
         */
         mask=(MagickStatusType) (map_length-1);
-        p=rle_pixels;
+        p=pixels;
+        x=(ssize_t) number_planes;
         if (number_colormaps == 1)
           for (i=0; i < (ssize_t) number_pixels; i++)
           {
-            *p=colormap[*p & mask];
+            ValidateColormapValue(image,*p & mask,&index,exception);
+            *p=colormap[(ssize_t) index];
             p++;
           }
         else
@@ -424,9 +474,17 @@ static Image *ReadRLEImage(const ImageInfo *image_info,ExceptionInfo *exception)
             for (i=0; i < (ssize_t) number_pixels; i++)
               for (x=0; x < (ssize_t) number_planes; x++)
               {
-                *p=colormap[x*map_length+(*p & mask)];
+                ValidateColormapValue(image,(size_t) (x*map_length+
+                    (*p & mask)),&index,exception);
+                *p=colormap[(ssize_t) index];
                 p++;
               }
+        if ((i < (ssize_t) number_pixels) || (x < (ssize_t) number_planes))
+          {
+            colormap=(unsigned char *) RelinquishMagickMemory(colormap);
+            pixel_info=RelinquishVirtualMemory(pixel_info);
+            ThrowReaderException(CorruptImageError,"UnableToReadImageData");
+          }
       }
     /*
       Initialize image structure.
@@ -436,20 +494,20 @@ static Image *ReadRLEImage(const ImageInfo *image_info,ExceptionInfo *exception)
         /*
           Convert raster image to DirectClass pixel packets.
         */
-        p=rle_pixels;
+        p=pixels;
         for (y=0; y < (ssize_t) image->rows; y++)
         {
           q=QueueAuthenticPixels(image,0,y,image->columns,1,exception);
-          if (q == (PixelPacket *) NULL)
+          if (q == (Quantum *) NULL)
             break;
           for (x=0; x < (ssize_t) image->columns; x++)
           {
-            SetRedPixelComponent(q,ScaleCharToQuantum(*p++));
-            SetGreenPixelComponent(q,ScaleCharToQuantum(*p++));
-            SetBluePixelComponent(q,ScaleCharToQuantum(*p++));
-            if (image->matte != MagickFalse)
-              SetAlphaPixelComponent(q,ScaleCharToQuantum(*p++));
-            q++;
+            SetPixelRed(image,ScaleCharToQuantum(*p++),q);
+            SetPixelGreen(image,ScaleCharToQuantum(*p++),q);
+            SetPixelBlue(image,ScaleCharToQuantum(*p++),q);
+            if (image->alpha_trait != UndefinedPixelTrait)
+              SetPixelAlpha(image,ScaleCharToQuantum(*p++),q);
+            q+=GetPixelChannels(image);
           }
           if (SyncAuthenticPixels(image,exception) == MagickFalse)
             break;
@@ -469,7 +527,7 @@ static Image *ReadRLEImage(const ImageInfo *image_info,ExceptionInfo *exception)
         */
         if (number_colormaps == 0)
           map_length=256;
-        if (AcquireImageColormap(image,map_length) == MagickFalse)
+        if (AcquireImageColormap(image,map_length,exception) == MagickFalse)
           ThrowReaderException(ResourceLimitError,"MemoryAllocationFailed");
         p=colormap;
         if (number_colormaps == 1)
@@ -478,21 +536,27 @@ static Image *ReadRLEImage(const ImageInfo *image_info,ExceptionInfo *exception)
             /*
               Pseudocolor.
             */
-            image->colormap[i].red=ScaleCharToQuantum((unsigned char) i);
-            image->colormap[i].green=ScaleCharToQuantum((unsigned char) i);
-            image->colormap[i].blue=ScaleCharToQuantum((unsigned char) i);
+            image->colormap[i].red=(MagickRealType)
+              ScaleCharToQuantum((unsigned char) i);
+            image->colormap[i].green=(MagickRealType)
+              ScaleCharToQuantum((unsigned char) i);
+            image->colormap[i].blue=(MagickRealType)
+              ScaleCharToQuantum((unsigned char) i);
           }
         else
           if (number_colormaps > 1)
             for (i=0; i < (ssize_t) image->colors; i++)
             {
-              image->colormap[i].red=ScaleCharToQuantum(*p);
-              image->colormap[i].green=ScaleCharToQuantum(*(p+map_length));
-              image->colormap[i].blue=ScaleCharToQuantum(*(p+map_length*2));
+              image->colormap[i].red=(MagickRealType)
+                ScaleCharToQuantum(*p);
+              image->colormap[i].green=(MagickRealType)
+                ScaleCharToQuantum(*(p+map_length));
+              image->colormap[i].blue=(MagickRealType)
+                ScaleCharToQuantum(*(p+map_length*2));
               p++;
             }
-        p=rle_pixels;
-        if (image->matte == MagickFalse)
+        p=pixels;
+        if (image->alpha_trait == UndefinedPixelTrait)
           {
             /*
               Convert raster image to PseudoClass pixel packets.
@@ -500,40 +564,12 @@ static Image *ReadRLEImage(const ImageInfo *image_info,ExceptionInfo *exception)
             for (y=0; y < (ssize_t) image->rows; y++)
             {
               q=QueueAuthenticPixels(image,0,y,image->columns,1,exception);
-              if (q == (PixelPacket *) NULL)
-                break;
-              indexes=GetAuthenticIndexQueue(image);
-              for (x=0; x < (ssize_t) image->columns; x++)
-                SetIndexPixelComponent(indexes+x,*p++);
-              if (SyncAuthenticPixels(image,exception) == MagickFalse)
-                break;
-              if (image->previous == (Image *) NULL)
-                {
-                  status=SetImageProgress(image,LoadImageTag,(MagickOffsetType)
-                    y,image->rows);
-                  if (status == MagickFalse)
-                    break;
-                }
-            }
-            (void) SyncImage(image);
-          }
-        else
-          {
-            /*
-              Image has a matte channel-- promote to DirectClass.
-            */
-            for (y=0; y < (ssize_t) image->rows; y++)
-            {
-              q=QueueAuthenticPixels(image,0,y,image->columns,1,exception);
-              if (q == (PixelPacket *) NULL)
+              if (q == (Quantum *) NULL)
                 break;
               for (x=0; x < (ssize_t) image->columns; x++)
               {
-                SetRedPixelComponent(q,image->colormap[*p++].red);
-                SetGreenPixelComponent(q,image->colormap[*p++].green);
-                SetBluePixelComponent(q,image->colormap[*p++].blue);
-                SetAlphaPixelComponent(q,ScaleCharToQuantum(*p++));
-                q++;
+                SetPixelIndex(image,*p++,q);
+                q+=GetPixelChannels(image);
               }
               if (SyncAuthenticPixels(image,exception) == MagickFalse)
                 break;
@@ -545,7 +581,45 @@ static Image *ReadRLEImage(const ImageInfo *image_info,ExceptionInfo *exception)
                     break;
                 }
             }
-            image->colormap=(PixelPacket *) RelinquishMagickMemory(
+            (void) SyncImage(image,exception);
+          }
+        else
+          {
+            /*
+              Image has a matte channel-- promote to DirectClass.
+            */
+            for (y=0; y < (ssize_t) image->rows; y++)
+            {
+              q=QueueAuthenticPixels(image,0,y,image->columns,1,exception);
+              if (q == (Quantum *) NULL)
+                break;
+              for (x=0; x < (ssize_t) image->columns; x++)
+              {
+                ValidateColormapValue(image,(ssize_t) *p++,&index,exception);
+                SetPixelRed(image,ClampToQuantum(image->colormap[(ssize_t)
+                  index].red),q);
+                ValidateColormapValue(image,(ssize_t) *p++,&index,exception);
+                SetPixelGreen(image,ClampToQuantum(image->colormap[(ssize_t)
+                  index].green),q);
+                ValidateColormapValue(image,(ssize_t) *p++,&index,exception);
+                SetPixelBlue(image,ClampToQuantum(image->colormap[(ssize_t)
+                  index].blue),q);
+                SetPixelAlpha(image,ScaleCharToQuantum(*p++),q);
+                q+=GetPixelChannels(image);
+              }
+              if (x < (ssize_t) image->columns)
+                break;
+              if (SyncAuthenticPixels(image,exception) == MagickFalse)
+                break;
+              if (image->previous == (Image *) NULL)
+                {
+                  status=SetImageProgress(image,LoadImageTag,(MagickOffsetType)
+                    y,image->rows);
+                  if (status == MagickFalse)
+                    break;
+                }
+            }
+            image->colormap=(PixelInfo *) RelinquishMagickMemory(
               image->colormap);
             image->storage_class=DirectClass;
             image->colors=0;
@@ -553,7 +627,7 @@ static Image *ReadRLEImage(const ImageInfo *image_info,ExceptionInfo *exception)
       }
     if (number_colormaps != 0)
       colormap=(unsigned char *) RelinquishMagickMemory(colormap);
-    rle_pixels=(unsigned char *) RelinquishMagickMemory(rle_pixels);
+    pixel_info=RelinquishVirtualMemory(pixel_info);
     if (EOFBlob(image) != MagickFalse)
       {
         ThrowFileException(exception,CorruptImageError,"UnexpectedEndOfFile",
@@ -573,7 +647,7 @@ static Image *ReadRLEImage(const ImageInfo *image_info,ExceptionInfo *exception)
         /*
           Allocate next image structure.
         */
-        AcquireNextImage(image_info,image);
+        AcquireNextImage(image_info,image,exception);
         if (GetNextImageInList(image) == (Image *) NULL)
           {
             image=DestroyImageList(image);
@@ -618,12 +692,10 @@ ModuleExport size_t RegisterRLEImage(void)
   MagickInfo
     *entry;
 
-  entry=SetMagickInfo("RLE");
+  entry=AcquireMagickInfo("RLE","RLE","Utah Run length encoded image");
   entry->decoder=(DecodeImageHandler *) ReadRLEImage;
   entry->magick=(IsImageFormatHandler *) IsRLE;
-  entry->adjoin=MagickFalse;
-  entry->description=ConstantString("Utah Run length encoded image");
-  entry->module=ConstantString("RLE");
+  entry->flags^=CoderAdjoinFlag;
   (void) RegisterMagickInfo(entry);
   return(MagickImageCoderSignature);
 }

@@ -13,7 +13,7 @@
 %                        Read/Write MGK Image Format.                         %
 %                                                                             %
 %                              Software Design                                %
-%                                John Cristy                                  %
+%                                Cristy                                  %
 %                                 July 1992                                   %
 %                                                                             %
 %                                                                             %
@@ -130,7 +130,7 @@ static Image *ReadMGKImage(const ImageInfo *image_info,
   ExceptionInfo *exception)
 {
   char
-    buffer[MaxTextExtent];
+    buffer[MagickPathExtent];
 
   Image
     *image;
@@ -219,9 +219,9 @@ static Image *ReadMGKImage(const ImageInfo *image_info,
         break;
       for (x=0; x < (ssize_t) image->columns; x++)
       {
-        SetRedPixelComponent(q,ScaleCharToQuantum(*p++));
-        SetGreenPixelComponent(q,ScaleCharToQuantum(*p++));
-        SetBluePixelComponent(q,ScaleCharToQuantum(*p++));
+        SetPixelRed(q,ScaleCharToQuantum(*p++));
+        SetPixelGreen(q,ScaleCharToQuantum(*p++));
+        SetPixelBlue(q,ScaleCharToQuantum(*p++));
         q++;
       }
       if (SyncAuthenticPixels(image,exception) == MagickFalse)
@@ -363,7 +363,7 @@ static MagickBooleanType WriteMGKImage(const ImageInfo *image_info,
   Image *image)
 {
   char
-    buffer[MaxTextExtent];
+    buffer[MagickPathExtent];
 
   MagickBooleanType
     status;
@@ -414,7 +414,7 @@ static MagickBooleanType WriteMGKImage(const ImageInfo *image_info,
       Initialize raster file header.
     */
     (void) WriteBlobString(image,"id=mgk\n");
-    (void) FormatMagickString(buffer,MaxTextExtent,"%lu %lu\n",image->columns,
+    (void) FormatMagickString(buffer,MagickPathExtent,"%lu %lu\n",image->columns,
       image->rows);
     (void) WriteBlobString(image,buffer);
     for (y=0; y < (ssize_t) image->rows; y++)

@@ -13,11 +13,11 @@
 %                       Read/Write JBIG Image Format                          %
 %                                                                             %
 %                              Software Design                                %
-%                                John Cristy                                  %
+%                                   Cristy                                    %
 %                                 July 1992                                   %
 %                                                                             %
 %                                                                             %
-%  Copyright 1999-2011 ImageMagick Studio LLC, a non-profit organization      %
+%  Copyright 1999-2016 ImageMagick Studio LLC, a non-profit organization      %
 %  dedicated to making software imaging solutions freely available.           %
 %                                                                             %
 %  You may not use this file except in compliance with the License.  You may  %
@@ -39,31 +39,41 @@
 /*
   Include declarations.
 */
-#include "magick/studio.h"
-#include "magick/blob.h"
-#include "magick/blob-private.h"
-#include "magick/cache.h"
-#include "magick/color-private.h"
-#include "magick/colormap.h"
-#include "magick/colorspace.h"
-#include "magick/constitute.h"
-#include "magick/exception.h"
-#include "magick/exception-private.h"
-#include "magick/geometry.h"
-#include "magick/image.h"
-#include "magick/image-private.h"
-#include "magick/list.h"
-#include "magick/magick.h"
-#include "magick/memory_.h"
-#include "magick/monitor.h"
-#include "magick/monitor-private.h"
-#include "magick/nt-feature.h"
-#include "magick/quantum-private.h"
-#include "magick/static.h"
-#include "magick/string_.h"
-#include "magick/module.h"
+#include "MagickCore/studio.h"
+#include "MagickCore/attribute.h"
+#include "MagickCore/blob.h"
+#include "MagickCore/blob-private.h"
+#include "MagickCore/cache.h"
+#include "MagickCore/color-private.h"
+#include "MagickCore/colormap.h"
+#include "MagickCore/colorspace.h"
+#include "MagickCore/colorspace-private.h"
+#include "MagickCore/constitute.h"
+#include "MagickCore/exception.h"
+#include "MagickCore/exception-private.h"
+#include "MagickCore/geometry.h"
+#include "MagickCore/image.h"
+#include "MagickCore/image-private.h"
+#include "MagickCore/list.h"
+#include "MagickCore/magick.h"
+#include "MagickCore/memory_.h"
+#include "MagickCore/monitor.h"
+#include "MagickCore/monitor-private.h"
+#include "MagickCore/nt-base-private.h"
+#include "MagickCore/pixel-accessor.h"
+#include "MagickCore/quantum-private.h"
+#include "MagickCore/static.h"
+#include "MagickCore/string_.h"
+#include "MagickCore/string-private.h"
+#include "MagickCore/module.h"
 #if defined(MAGICKCORE_JBIG_DELEGATE)
+#if defined(__cplusplus) || defined(c_plusplus)
+extern "C" {
+#endif
 #include "jbig.h"
+#if defined(__cplusplus) || defined(c_plusplus)
+}
+#endif
 #endif
 
 /*
@@ -71,7 +81,7 @@
 */
 #if defined(MAGICKCORE_JBIG_DELEGATE)
 static MagickBooleanType
-  WriteJBIGImage(const ImageInfo *,Image *);
+  WriteJBIGImage(const ImageInfo *,Image *,ExceptionInfo *);
 #endif
 
 #if defined(MAGICKCORE_JBIG_DELEGATE)
@@ -108,26 +118,22 @@ static Image *ReadJBIGImage(const ImageInfo *image_info,
   Image
     *image;
 
-  IndexPacket
-    index;
-
   MagickStatusType
     status;
 
-  register IndexPacket
-    *indexes;
+  Quantum
+    index;
 
   register ssize_t
     x;
 
-  register PixelPacket
+  register Quantum
     *q;
 
   register unsigned char
     *p;
 
   ssize_t
-    count,
     length,
     y;
 
@@ -143,13 +149,13 @@ static Image *ReadJBIGImage(const ImageInfo *image_info,
     Open image file.
   */
   assert(image_info != (const ImageInfo *) NULL);
-  assert(image_info->signature == MagickSignature);
+  assert(image_info->signature == MagickCoreSignature);
   if (image_info->debug != MagickFalse)
     (void) LogMagickEvent(TraceEvent,GetMagickModule(),"%s",
       image_info->filename);
   assert(exception != (ExceptionInfo *) NULL);
-  assert(exception->signature == MagickSignature);
-  image=AcquireImage(image_info);
+  assert(exception->signature == MagickCoreSignature);
+  image=AcquireImage(image_info,exception);
   status=OpenBlob(image_info,image,ReadBinaryBlobMode,exception);
   if (status == MagickFalse)
     {
@@ -173,7 +179,10 @@ static Image *ReadJBIGImage(const ImageInfo *image_info,
   buffer=(unsigned char *) AcquireQuantumMemory(MagickMaxBufferExtent,
     sizeof(*buffer));
   if (buffer == (unsigned char *) NULL)
-    ThrowReaderException(ResourceLimitError,"MemoryAllocationFailed");
+    {
+      jbg_dec_free(&jbig_info);
+      ThrowReaderException(ResourceLimitError,"MemoryAllocationFailed");
+    }
   status=JBG_EAGAIN;
   do
   {
@@ -181,7 +190,6 @@ static Image *ReadJBIGImage(const ImageInfo *image_info,
     if (length == 0)
       break;
     p=buffer;
-    count=0;
     while ((length > 0) && ((status == JBG_EAGAIN) || (status == JBG_EOK)))
     {
       size_t
@@ -198,8 +206,9 @@ static Image *ReadJBIGImage(const ImageInfo *image_info,
   image->columns=jbg_dec_getwidth(&jbig_info);
   image->rows=jbg_dec_getheight(&jbig_info);
   image->compression=JBIG2Compression;
-  if (AcquireImageColormap(image,2) == MagickFalse)
+  if (AcquireImageColormap(image,2,exception) == MagickFalse)
     {
+      jbg_dec_free(&jbig_info);
       buffer=(unsigned char *) RelinquishMagickMemory(buffer);
       ThrowReaderException(ResourceLimitError,"MemoryAllocationFailed");
     }
@@ -209,12 +218,21 @@ static Image *ReadJBIGImage(const ImageInfo *image_info,
   image->colormap[1].red=QuantumRange;
   image->colormap[1].green=QuantumRange;
   image->colormap[1].blue=QuantumRange;
-  image->x_resolution=300;
-  image->y_resolution=300;
+  image->resolution.x=300;
+  image->resolution.y=300;
   if (image_info->ping != MagickFalse)
     {
+      jbg_dec_free(&jbig_info);
+      buffer=(unsigned char *) RelinquishMagickMemory(buffer);
       (void) CloseBlob(image);
       return(GetFirstImageInList(image));
+    }
+  status=SetImageExtent(image,image->columns,image->rows,exception);
+  if (status == MagickFalse)
+    {
+      jbg_dec_free(&jbig_info);
+      buffer=(unsigned char *) RelinquishMagickMemory(buffer);
+      return(DestroyImageList(image));
     }
   /*
     Convert X bitmap image to pixel packets.
@@ -223,9 +241,8 @@ static Image *ReadJBIGImage(const ImageInfo *image_info,
   for (y=0; y < (ssize_t) image->rows; y++)
   {
     q=QueueAuthenticPixels(image,0,y,image->columns,1,exception);
-    if (q == (PixelPacket *) NULL)
+    if (q == (Quantum *) NULL)
       break;
-    indexes=GetAuthenticIndexQueue(image);
     bit=0;
     byte=0;
     for (x=0; x < (ssize_t) image->columns; x++)
@@ -237,9 +254,9 @@ static Image *ReadJBIGImage(const ImageInfo *image_info,
       byte<<=1;
       if (bit == 8)
         bit=0;
-      SetIndexPixelComponent(indexes+x,index);
-      SetRGBOPixelComponents(q,image->colormap+(ssize_t) index);
-      q++;
+      SetPixelIndex(image,index,q);
+      SetPixelViaPixelInfo(image,image->colormap+(ssize_t) index,q);
+      q+=GetPixelChannels(image);
     }
     if (SyncAuthenticPixels(image,exception) == MagickFalse)
       break;
@@ -286,45 +303,39 @@ ModuleExport size_t RegisterJBIGImage(void)
 #define JBIGDescription  "Joint Bi-level Image experts Group interchange format"
 
   char
-    version[MaxTextExtent];
+    version[MagickPathExtent];
 
   MagickInfo
     *entry;
 
   *version='\0';
 #if defined(JBG_VERSION)
-  (void) CopyMagickString(version,JBG_VERSION,MaxTextExtent);
+  (void) CopyMagickString(version,JBG_VERSION,MagickPathExtent);
 #endif
-  entry=SetMagickInfo("BIE");
+  entry=AcquireMagickInfo("JBIG","BIE",JBIGDescription);
 #if defined(MAGICKCORE_JBIG_DELEGATE)
   entry->decoder=(DecodeImageHandler *) ReadJBIGImage;
   entry->encoder=(EncodeImageHandler *) WriteJBIGImage;
 #endif
-  entry->adjoin=MagickFalse;
-  entry->description=ConstantString(JBIGDescription);
+  entry->flags^=CoderAdjoinFlag;
   if (*version != '\0')
     entry->version=ConstantString(version);
-  entry->module=ConstantString("JBIG");
   (void) RegisterMagickInfo(entry);
-  entry=SetMagickInfo("JBG");
+  entry=AcquireMagickInfo("JBIG","JBG",JBIGDescription);
 #if defined(MAGICKCORE_JBIG_DELEGATE)
   entry->decoder=(DecodeImageHandler *) ReadJBIGImage;
   entry->encoder=(EncodeImageHandler *) WriteJBIGImage;
 #endif
-  entry->description=ConstantString(JBIGDescription);
   if (*version != '\0')
     entry->version=ConstantString(version);
-  entry->module=ConstantString("JBIG");
   (void) RegisterMagickInfo(entry);
-  entry=SetMagickInfo("JBIG");
+  entry=AcquireMagickInfo("JBIG","JBIG",JBIGDescription);
 #if defined(MAGICKCORE_JBIG_DELEGATE)
   entry->decoder=(DecodeImageHandler *) ReadJBIGImage;
   entry->encoder=(EncodeImageHandler *) WriteJBIGImage;
 #endif
-  entry->description=ConstantString(JBIGDescription);
   if (*version != '\0')
     entry->version=ConstantString(version);
-  entry->module=ConstantString("JBIG");
   (void) RegisterMagickInfo(entry);
   return(MagickImageCoderSignature);
 }
@@ -371,7 +382,8 @@ ModuleExport void UnregisterJBIGImage(void)
 %
 %  The format of the WriteJBIGImage method is:
 %
-%      MagickBooleanType WriteJBIGImage(const ImageInfo *image_info,Image *image)
+%      MagickBooleanType WriteJBIGImage(const ImageInfo *image_info,
+%        Image *image,ExceptionInfo *exception)
 %
 %  A description of each parameter follows.
 %
@@ -379,6 +391,7 @@ ModuleExport void UnregisterJBIGImage(void)
 %
 %    o image:  The image.
 %
+%    o exception: return any errors or warnings in this structure.
 %
 */
 
@@ -392,7 +405,7 @@ static void JBIGEncode(unsigned char *pixels,size_t length,void *data)
 }
 
 static MagickBooleanType WriteJBIGImage(const ImageInfo *image_info,
-  Image *image)
+  Image *image,ExceptionInfo *exception)
 {
   double
     version;
@@ -403,10 +416,10 @@ static MagickBooleanType WriteJBIGImage(const ImageInfo *image_info,
   MagickOffsetType
     scene;
 
-  register const IndexPacket
-    *indexes;
+  MemoryInfo
+    *pixel_info;
 
-  register const PixelPacket
+  register const Quantum
     *p;
 
   register ssize_t
@@ -433,45 +446,45 @@ static MagickBooleanType WriteJBIGImage(const ImageInfo *image_info,
     Open image file.
   */
   assert(image_info != (const ImageInfo *) NULL);
-  assert(image_info->signature == MagickSignature);
+  assert(image_info->signature == MagickCoreSignature);
   assert(image != (Image *) NULL);
-  assert(image->signature == MagickSignature);
+  assert(image->signature == MagickCoreSignature);
   if (image->debug != MagickFalse)
     (void) LogMagickEvent(TraceEvent,GetMagickModule(),"%s",image->filename);
-  status=OpenBlob(image_info,image,WriteBinaryBlobMode,&image->exception);
+  assert(exception != (ExceptionInfo *) NULL);
+  assert(exception->signature == MagickCoreSignature);
+  status=OpenBlob(image_info,image,WriteBinaryBlobMode,exception);
   if (status == MagickFalse)
     return(status);
-  version=InterpretLocaleValue(JBG_VERSION,(char **) NULL);
+  version=StringToDouble(JBG_VERSION,(char **) NULL);
   scene=0;
   do
   {
     /*
       Allocate pixel data.
     */
-    if (image->colorspace != RGBColorspace)
-      (void) TransformImageColorspace(image,RGBColorspace);
+    (void) TransformImageColorspace(image,sRGBColorspace,exception);
     number_packets=(image->columns+7)/8;
-    pixels=(unsigned char *) AcquireQuantumMemory(number_packets,
-      image->rows*sizeof(*pixels));
-    if (pixels == (unsigned char *) NULL)
+    pixel_info=AcquireVirtualMemory(number_packets,image->rows*sizeof(*pixels));
+    if (pixel_info == (MemoryInfo *) NULL)
       ThrowWriterException(ResourceLimitError,"MemoryAllocationFailed");
+    pixels=(unsigned char *) GetVirtualMemoryBlob(pixel_info);
     /*
       Convert pixels to a bitmap.
     */
-    (void) SetImageType(image,BilevelType);
+    (void) SetImageType(image,BilevelType,exception);
     q=pixels;
     for (y=0; y < (ssize_t) image->rows; y++)
     {
-      p=GetVirtualPixels(image,0,y,image->columns,1,&image->exception);
-      if (p == (const PixelPacket *) NULL)
+      p=GetVirtualPixels(image,0,y,image->columns,1,exception);
+      if (p == (const Quantum *) NULL)
         break;
-      indexes=GetVirtualIndexQueue(image);
       bit=0;
       byte=0;
       for (x=0; x < (ssize_t) image->columns; x++)
       {
         byte<<=1;
-        if (PixelIntensity(p) < (QuantumRange/2.0))
+        if (GetPixelLuma(image,p) < (QuantumRange/2.0))
           byte|=0x01;
         bit++;
         if (bit == 8)
@@ -480,7 +493,7 @@ static MagickBooleanType WriteJBIGImage(const ImageInfo *image_info,
             bit=0;
             byte=0;
           }
-        p++;
+        p+=GetPixelChannels(image);
       }
       if (bit != 0)
         *q++=byte << (8-bit);
@@ -506,12 +519,8 @@ static MagickBooleanType WriteJBIGImage(const ImageInfo *image_info,
           x_resolution,
           y_resolution;
 
-        ssize_t
-          sans_offset;
-
         x_resolution=640;
         y_resolution=480;
-        sans_offset=0;
         if (image_info->density != (char *) NULL)
           {
             GeometryInfo
@@ -542,7 +551,7 @@ static MagickBooleanType WriteJBIGImage(const ImageInfo *image_info,
     */
     jbg_enc_out(&jbig_info);
     jbg_enc_free(&jbig_info);
-    pixels=(unsigned char *) RelinquishMagickMemory(pixels);
+    pixel_info=RelinquishVirtualMemory(pixel_info);
     if (GetNextImageInList(image) == (Image *) NULL)
       break;
     image=SyncNextImageInList(image);

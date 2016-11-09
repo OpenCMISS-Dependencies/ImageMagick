@@ -13,11 +13,11 @@
 %                    Read Alias/Wavefront RLE Image Format                    %
 %                                                                             %
 %                              Software Design                                %
-%                                John Cristy                                  %
+%                                   Cristy                                    %
 %                                 July 1992                                   %
 %                                                                             %
 %                                                                             %
-%  Copyright 1999-2011 ImageMagick Studio LLC, a non-profit organization      %
+%  Copyright 1999-2016 ImageMagick Studio LLC, a non-profit organization      %
 %  dedicated to making software imaging solutions freely available.           %
 %                                                                             %
 %  You may not use this file except in compliance with the License.  You may  %
@@ -39,24 +39,25 @@
 /*
   Include declarations.
 */
-#include "magick/studio.h"
-#include "magick/blob.h"
-#include "magick/blob-private.h"
-#include "magick/cache.h"
-#include "magick/colormap.h"
-#include "magick/exception.h"
-#include "magick/exception-private.h"
-#include "magick/image.h"
-#include "magick/image-private.h"
-#include "magick/list.h"
-#include "magick/magick.h"
-#include "magick/memory_.h"
-#include "magick/monitor.h"
-#include "magick/monitor-private.h"
-#include "magick/quantum-private.h"
-#include "magick/static.h"
-#include "magick/string_.h"
-#include "magick/module.h"
+#include "MagickCore/studio.h"
+#include "MagickCore/blob.h"
+#include "MagickCore/blob-private.h"
+#include "MagickCore/cache.h"
+#include "MagickCore/colormap.h"
+#include "MagickCore/exception.h"
+#include "MagickCore/exception-private.h"
+#include "MagickCore/image.h"
+#include "MagickCore/image-private.h"
+#include "MagickCore/list.h"
+#include "MagickCore/magick.h"
+#include "MagickCore/memory_.h"
+#include "MagickCore/monitor.h"
+#include "MagickCore/monitor-private.h"
+#include "MagickCore/pixel-accessor.h"
+#include "MagickCore/quantum-private.h"
+#include "MagickCore/static.h"
+#include "MagickCore/string_.h"
+#include "MagickCore/module.h"
 
 /*
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -90,24 +91,19 @@ static Image *ReadPIXImage(const ImageInfo *image_info,ExceptionInfo *exception)
   Image
     *image;
 
-  IndexPacket
-    index;
-
   MagickBooleanType
     status;
 
   Quantum
     blue,
     green,
+    index,
     red;
-
-  register IndexPacket
-    *indexes;
 
   register ssize_t
     x;
 
-  register PixelPacket
+  register Quantum
     *q;
 
   size_t
@@ -123,13 +119,13 @@ static Image *ReadPIXImage(const ImageInfo *image_info,ExceptionInfo *exception)
     Open image file.
   */
   assert(image_info != (const ImageInfo *) NULL);
-  assert(image_info->signature == MagickSignature);
+  assert(image_info->signature == MagickCoreSignature);
   if (image_info->debug != MagickFalse)
     (void) LogMagickEvent(TraceEvent,GetMagickModule(),"%s",
       image_info->filename);
   assert(exception != (ExceptionInfo *) NULL);
-  assert(exception->signature == MagickSignature);
-  image=AcquireImage(image_info);
+  assert(exception->signature == MagickCoreSignature);
+  image=AcquireImage(image_info,exception);
   status=OpenBlob(image_info,image,ReadBinaryBlobMode,exception);
   if (status == MagickFalse)
     {
@@ -155,25 +151,27 @@ static Image *ReadPIXImage(const ImageInfo *image_info,ExceptionInfo *exception)
     image->columns=width;
     image->rows=height;
     if (bits_per_pixel == 8)
-      if (AcquireImageColormap(image,256) == MagickFalse)
+      if (AcquireImageColormap(image,256,exception) == MagickFalse)
         ThrowReaderException(ResourceLimitError,"MemoryAllocationFailed");
     if ((image_info->ping != MagickFalse) && (image_info->number_scenes != 0))
       if (image->scene >= (image_info->scene+image_info->number_scenes-1))
         break;
+    status=SetImageExtent(image,image->columns,image->rows,exception);
+    if (status == MagickFalse)
+      return(DestroyImageList(image));
     /*
       Convert PIX raster image to pixel packets.
     */
     red=(Quantum) 0;
     green=(Quantum) 0;
     blue=(Quantum) 0;
-    index=(IndexPacket) 0;
+    index=0;
     length=0;
     for (y=0; y < (ssize_t) image->rows; y++)
     {
       q=QueueAuthenticPixels(image,0,y,image->columns,1,exception);
-      if (q == (PixelPacket *) NULL)
+      if (q == (Quantum *) NULL)
         break;
-      indexes=GetAuthenticIndexQueue(image);
       for (x=0; x < (ssize_t) image->columns; x++)
       {
         if (length == 0)
@@ -189,12 +187,12 @@ static Image *ReadPIXImage(const ImageInfo *image_info,ExceptionInfo *exception)
               }
           }
         if (image->storage_class == PseudoClass)
-          SetIndexPixelComponent(indexes+x,index);
-        SetBluePixelComponent(q,blue);
-        SetGreenPixelComponent(q,green);
-        SetRedPixelComponent(q,red);
+          SetPixelIndex(image,index,q);
+        SetPixelBlue(image,blue,q);
+        SetPixelGreen(image,green,q);
+        SetPixelRed(image,red,q);
         length--;
-        q++;
+        q+=GetPixelChannels(image);
       }
       if (SyncAuthenticPixels(image,exception) == MagickFalse)
         break;
@@ -207,7 +205,7 @@ static Image *ReadPIXImage(const ImageInfo *image_info,ExceptionInfo *exception)
         }
     }
     if (image->storage_class == PseudoClass)
-      (void) SyncImage(image);
+      (void) SyncImage(image,exception);
     if (EOFBlob(image) != MagickFalse)
       {
         ThrowFileException(exception,CorruptImageError,"UnexpectedEndOfFile",
@@ -227,12 +225,12 @@ static Image *ReadPIXImage(const ImageInfo *image_info,ExceptionInfo *exception)
     bits_per_pixel=ReadBlobMSBShort(image);
     status=(width != 0UL) && (height == 0UL) && ((bits_per_pixel == 8) ||
       (bits_per_pixel == 24)) ? MagickTrue : MagickFalse;
-    if (status == MagickTrue)
+    if (status != MagickFalse)
       {
         /*
           Allocate next image structure.
         */
-        AcquireNextImage(image_info,image);
+        AcquireNextImage(image_info,image,exception);
         if (GetNextImageInList(image) == (Image *) NULL)
           {
             image=DestroyImageList(image);
@@ -244,7 +242,7 @@ static Image *ReadPIXImage(const ImageInfo *image_info,ExceptionInfo *exception)
         if (status == MagickFalse)
           break;
       }
-  } while (status == MagickTrue);
+  } while (status != MagickFalse);
   (void) CloseBlob(image);
   return(GetFirstImageInList(image));
 }
@@ -277,10 +275,8 @@ ModuleExport size_t RegisterPIXImage(void)
   MagickInfo
     *entry;
 
-  entry=SetMagickInfo("PIX");
+  entry=AcquireMagickInfo("PIX","PIX","Alias/Wavefront RLE image format");
   entry->decoder=(DecodeImageHandler *) ReadPIXImage;
-  entry->description=ConstantString("Alias/Wavefront RLE image format");
-  entry->module=ConstantString("PIX");
   (void) RegisterMagickInfo(entry);
   return(MagickImageCoderSignature);
 }

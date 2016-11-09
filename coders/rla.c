@@ -13,11 +13,11 @@
 %                      Read Alias/Wavefront Image Format                      %
 %                                                                             %
 %                              Software Design                                %
-%                                John Cristy                                  %
+%                                   Cristy                                    %
 %                                 July 1992                                   %
 %                                                                             %
 %                                                                             %
-%  Copyright 1999-2011 ImageMagick Studio LLC, a non-profit organization      %
+%  Copyright 1999-2016 ImageMagick Studio LLC, a non-profit organization      %
 %  dedicated to making software imaging solutions freely available.           %
 %                                                                             %
 %  You may not use this file except in compliance with the License.  You may  %
@@ -39,24 +39,25 @@
 /*
   Include declarations.
 */
-#include "magick/studio.h"
-#include "magick/property.h"
-#include "magick/blob.h"
-#include "magick/blob-private.h"
-#include "magick/cache.h"
-#include "magick/exception.h"
-#include "magick/exception-private.h"
-#include "magick/image.h"
-#include "magick/image-private.h"
-#include "magick/list.h"
-#include "magick/magick.h"
-#include "magick/memory_.h"
-#include "magick/monitor.h"
-#include "magick/monitor-private.h"
-#include "magick/quantum-private.h"
-#include "magick/static.h"
-#include "magick/string_.h"
-#include "magick/module.h"
+#include "MagickCore/studio.h"
+#include "MagickCore/property.h"
+#include "MagickCore/blob.h"
+#include "MagickCore/blob-private.h"
+#include "MagickCore/cache.h"
+#include "MagickCore/exception.h"
+#include "MagickCore/exception-private.h"
+#include "MagickCore/image.h"
+#include "MagickCore/image-private.h"
+#include "MagickCore/list.h"
+#include "MagickCore/magick.h"
+#include "MagickCore/memory_.h"
+#include "MagickCore/monitor.h"
+#include "MagickCore/monitor-private.h"
+#include "MagickCore/pixel-accessor.h"
+#include "MagickCore/quantum-private.h"
+#include "MagickCore/static.h"
+#include "MagickCore/string_.h"
+#include "MagickCore/module.h"
 
 /*
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -112,25 +113,25 @@ static Image *ReadRLAImage(const ImageInfo *image_info,ExceptionInfo *exception)
       revision;
 
     char
-      gamma[16],
-      red_primary[24],
-      green_primary[24],
-      blue_primary[24],
-      white_point[24];
+      gamma[16+1],
+      red_primary[24+1],
+      green_primary[24+1],
+      blue_primary[24+1],
+      white_point[24+1];
 
-    ssize_t
+    int
       job_number;
 
     char
-      name[128],
-      description[128],
-      program[64],
-      machine[32],
-      user[32],
-      date[20],
-      aspect[24],
-      aspect_ratio[8],
-      chan[32];
+      name[128+1],
+      description[128+1],
+      program[64+1],
+      machine[32+1],
+      user[32+1],
+      date[20+1],
+      aspect[24+1],
+      aspect_ratio[8+1],
+      chan[32+1];
 
     short
       field;
@@ -147,10 +148,10 @@ static Image *ReadRLAImage(const ImageInfo *image_info,ExceptionInfo *exception)
       auxiliary_bits;
 
     char
-      auxiliary[32],
-      space[36];
+      auxiliary[32+1],
+      space[36+1];
 
-    ssize_t
+    int
       next;
   } RLAInfo;
 
@@ -166,18 +167,18 @@ static Image *ReadRLAImage(const ImageInfo *image_info,ExceptionInfo *exception)
     status;
 
   MagickOffsetType
-    offset;
+    offset,
+    *scanlines;
 
   register ssize_t
     i,
     x;
 
-  register PixelPacket
+  register Quantum
     *q;
 
   ssize_t
     count,
-    *scanlines,
     y;
 
   RLAInfo
@@ -190,19 +191,20 @@ static Image *ReadRLAImage(const ImageInfo *image_info,ExceptionInfo *exception)
     Open image file.
   */
   assert(image_info != (const ImageInfo *) NULL);
-  assert(image_info->signature == MagickSignature);
+  assert(image_info->signature == MagickCoreSignature);
   if (image_info->debug != MagickFalse)
     (void) LogMagickEvent(TraceEvent,GetMagickModule(),"%s",
       image_info->filename);
   assert(exception != (ExceptionInfo *) NULL);
-  assert(exception->signature == MagickSignature);
-  image=AcquireImage(image_info);
+  assert(exception->signature == MagickCoreSignature);
+  image=AcquireImage(image_info,exception);
   status=OpenBlob(image_info,image,ReadBinaryBlobMode,exception);
   if (status == MagickFalse)
     {
       image=DestroyImageList(image);
       return((Image *) NULL);
     }
+  (void) ResetMagickMemory(&rla_info,0,sizeof(rla_info));
   rla_info.window.left=(short) ReadBlobMSBShort(image);
   rla_info.window.right=(short) ReadBlobMSBShort(image);
   rla_info.window.bottom=(short) ReadBlobMSBShort(image);
@@ -225,9 +227,10 @@ static Image *ReadRLAImage(const ImageInfo *image_info,ExceptionInfo *exception)
   count=ReadBlob(image,24,(unsigned char *) rla_info.green_primary);
   count=ReadBlob(image,24,(unsigned char *) rla_info.blue_primary);
   count=ReadBlob(image,24,(unsigned char *) rla_info.white_point);
-  rla_info.job_number=(int) ReadBlobMSBLong(image);
+  rla_info.job_number=ReadBlobMSBSignedLong(image);
   count=ReadBlob(image,128,(unsigned char *) rla_info.name);
   count=ReadBlob(image,128,(unsigned char *) rla_info.description);
+  rla_info.description[127]='\0';
   count=ReadBlob(image,64,(unsigned char *) rla_info.program);
   count=ReadBlob(image,32,(unsigned char *) rla_info.machine);
   count=ReadBlob(image,32,(unsigned char *) rla_info.user);
@@ -247,28 +250,35 @@ static Image *ReadRLAImage(const ImageInfo *image_info,ExceptionInfo *exception)
   count=ReadBlob(image,36,(unsigned char *) rla_info.space);
   if ((size_t) count != 36)
     ThrowReaderException(CorruptImageError,"UnableToReadImageData");
-  rla_info.next=(int) ReadBlobMSBLong(image);
+  rla_info.next=ReadBlobMSBSignedLong(image);
   /*
     Initialize image structure.
   */
-  image->matte=rla_info.number_matte_channels != 0 ? MagickTrue : MagickFalse;
-  image->columns=1UL*rla_info.active_window.right-rla_info.active_window.left+1;
-  image->rows=1UL*rla_info.active_window.top-rla_info.active_window.bottom+1;
+  image->alpha_trait=rla_info.number_matte_channels != 0 ? BlendPixelTrait : 
+    UndefinedPixelTrait;
+  image->columns=(size_t) (rla_info.active_window.right-
+    rla_info.active_window.left+1);
+  image->rows=(size_t) (rla_info.active_window.top-
+    rla_info.active_window.bottom+1);
   if (image_info->ping != MagickFalse)
     {
       (void) CloseBlob(image);
       return(GetFirstImageInList(image));
     }
-  scanlines=(ssize_t *) AcquireQuantumMemory(image->rows,sizeof(*scanlines));
-  if (scanlines == (ssize_t *) NULL)
+  status=SetImageExtent(image,image->columns,image->rows,exception);
+  if (status == MagickFalse)
+    return(DestroyImageList(image));
+  scanlines=(MagickOffsetType *) AcquireQuantumMemory(image->rows,
+    sizeof(*scanlines));
+  if (scanlines == (MagickOffsetType *) NULL)
     ThrowReaderException(ResourceLimitError,"MemoryAllocationFailed");
   if (*rla_info.description != '\0')
-    (void) SetImageProperty(image,"comment",rla_info.description);
+    (void) SetImageProperty(image,"comment",rla_info.description,exception);
   /*
     Read offsets to each scanline data.
   */
   for (i=0; i < (ssize_t) image->rows; i++)
-    scanlines[i]=(int) ReadBlobMSBLong(image);
+    scanlines[i]=(MagickOffsetType) ReadBlobMSBSignedLong(image);
   /*
     Read image data.
   */
@@ -280,7 +290,7 @@ static Image *ReadRLAImage(const ImageInfo *image_info,ExceptionInfo *exception)
       ThrowReaderException(CorruptImageError,"ImproperImageHeader");
     for (channel=0; channel < (int) rla_info.number_channels; channel++)
     {
-      length=(int) ReadBlobMSBShort(image);
+      length=ReadBlobMSBSignedShort(image);
       while (length > 0)
       {
         byte=(unsigned char) ReadBlobByte(image);
@@ -296,7 +306,7 @@ static Image *ReadRLAImage(const ImageInfo *image_info,ExceptionInfo *exception)
             {
               q=GetAuthenticPixels(image,(ssize_t) (x % image->columns),
                 (ssize_t) (y % image->rows),1,1,exception);
-              if (q == (PixelPacket *) NULL)
+              if (q == (Quantum *) NULL)
                 break;
               byte=(unsigned char) ReadBlobByte(image);
               length--;
@@ -304,23 +314,23 @@ static Image *ReadRLAImage(const ImageInfo *image_info,ExceptionInfo *exception)
               {
                 case 0:
                 {
-                  SetRedPixelComponent(q,ScaleCharToQuantum(byte));
+                  SetPixelRed(image,ScaleCharToQuantum(byte),q);
                   break;
                 }
                 case 1:
                 {
-                  SetGreenPixelComponent(q,ScaleCharToQuantum(byte));
+                  SetPixelGreen(image,ScaleCharToQuantum(byte),q);
                   break;
                 }
                 case 2:
                 {
-                  SetBluePixelComponent(q,ScaleCharToQuantum(byte));
+                  SetPixelBlue(image,ScaleCharToQuantum(byte),q);
                   break;
                 }
                 case 3:
                 default:
                 {
-                  SetAlphaPixelComponent(q,ScaleCharToQuantum(byte));
+                  SetPixelAlpha(image,ScaleCharToQuantum(byte),q);
                   break;
                 }
               }
@@ -338,29 +348,29 @@ static Image *ReadRLAImage(const ImageInfo *image_info,ExceptionInfo *exception)
         {
           q=GetAuthenticPixels(image,(ssize_t) (x % image->columns),
             (ssize_t) (y % image->rows),1,1,exception);
-          if (q == (PixelPacket *) NULL)
+          if (q == (Quantum *) NULL)
             break;
           switch (channel)
           {
             case 0:
             {
-              SetRedPixelComponent(q,ScaleCharToQuantum(byte));
+              SetPixelRed(image,ScaleCharToQuantum(byte),q);
               break;
             }
             case 1:
             {
-              SetGreenPixelComponent(q,ScaleCharToQuantum(byte));
+              SetPixelGreen(image,ScaleCharToQuantum(byte),q);
               break;
             }
             case 2:
             {
-              SetBluePixelComponent(q,ScaleCharToQuantum(byte));
+              SetPixelBlue(image,ScaleCharToQuantum(byte),q);
               break;
             }
             case 3:
             default:
             {
-              SetAlphaPixelComponent(q,ScaleCharToQuantum(byte));
+              SetPixelAlpha(image,ScaleCharToQuantum(byte),q);
               break;
             }
           }
@@ -380,6 +390,7 @@ static Image *ReadRLAImage(const ImageInfo *image_info,ExceptionInfo *exception)
   if (EOFBlob(image) != MagickFalse)
     ThrowFileException(exception,CorruptImageError,"UnexpectedEndOfFile",
       image->filename);
+  scanlines=(MagickOffsetType *) RelinquishMagickMemory(scanlines);
   (void) CloseBlob(image);
   return(GetFirstImageInList(image));
 }
@@ -412,12 +423,10 @@ ModuleExport size_t RegisterRLAImage(void)
   MagickInfo
     *entry;
 
-  entry=SetMagickInfo("RLA");
+  entry=AcquireMagickInfo("RLA","RLA","Alias/Wavefront image");
   entry->decoder=(DecodeImageHandler *) ReadRLAImage;
-  entry->adjoin=MagickFalse;
-  entry->seekable_stream=MagickTrue;
-  entry->description=ConstantString("Alias/Wavefront image");
-  entry->module=ConstantString("RLA");
+  entry->flags^=CoderAdjoinFlag;
+  entry->flags|=CoderSeekableStreamFlag;
   (void) RegisterMagickInfo(entry);
   return(MagickImageCoderSignature);
 }

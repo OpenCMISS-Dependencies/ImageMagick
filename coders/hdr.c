@@ -13,11 +13,11 @@
 %                   Read/Write Radiance RGBE Image Format                     %
 %                                                                             %
 %                              Software Design                                %
-%                                John Cristy                                  %
+%                                   Cristy                                    %
 %                                 July 1992                                   %
 %                                                                             %
 %                                                                             %
-%  Copyright 1999-2011 ImageMagick Studio LLC, a non-profit organization      %
+%  Copyright 1999-2016 ImageMagick Studio LLC, a non-profit organization      %
 %  dedicated to making software imaging solutions freely available.           %
 %                                                                             %
 %  You may not use this file except in compliance with the License.  You may  %
@@ -39,32 +39,34 @@
 /*
   Include declarations.
 */
-#include "magick/studio.h"
-#include "magick/blob.h"
-#include "magick/blob-private.h"
-#include "magick/cache.h"
-#include "magick/colorspace.h"
-#include "magick/exception.h"
-#include "magick/exception-private.h"
-#include "magick/image.h"
-#include "magick/image-private.h"
-#include "magick/list.h"
-#include "magick/magick.h"
-#include "magick/memory_.h"
-#include "magick/monitor.h"
-#include "magick/monitor-private.h"
-#include "magick/property.h"
-#include "magick/quantum-private.h"
-#include "magick/static.h"
-#include "magick/string_.h"
-#include "magick/string-private.h"
-#include "magick/module.h"
+#include "MagickCore/studio.h"
+#include "MagickCore/blob.h"
+#include "MagickCore/blob-private.h"
+#include "MagickCore/cache.h"
+#include "MagickCore/colorspace.h"
+#include "MagickCore/colorspace-private.h"
+#include "MagickCore/exception.h"
+#include "MagickCore/exception-private.h"
+#include "MagickCore/image.h"
+#include "MagickCore/image-private.h"
+#include "MagickCore/list.h"
+#include "MagickCore/magick.h"
+#include "MagickCore/memory_.h"
+#include "MagickCore/monitor.h"
+#include "MagickCore/monitor-private.h"
+#include "MagickCore/pixel-accessor.h"
+#include "MagickCore/property.h"
+#include "MagickCore/quantum-private.h"
+#include "MagickCore/static.h"
+#include "MagickCore/string_.h"
+#include "MagickCore/string-private.h"
+#include "MagickCore/module.h"
 
 /*
   Forward declarations.
 */
 static MagickBooleanType
-  WriteHDRImage(const ImageInfo *,Image *);
+  WriteHDRImage(const ImageInfo *,Image *,ExceptionInfo *);
 
 /*
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -133,10 +135,10 @@ static MagickBooleanType IsHDR(const unsigned char *magick,
 static Image *ReadHDRImage(const ImageInfo *image_info,ExceptionInfo *exception)
 {
   char
-    format[MaxTextExtent],
-    keyword[MaxTextExtent],
-    tag[MaxTextExtent],
-    value[MaxTextExtent];
+    format[MagickPathExtent],
+    keyword[MagickPathExtent],
+    tag[MagickPathExtent],
+    value[MagickPathExtent];
 
   double
     gamma;
@@ -151,15 +153,15 @@ static Image *ReadHDRImage(const ImageInfo *image_info,ExceptionInfo *exception)
     status,
     value_expected;
 
-  register PixelPacket
+  register Quantum
     *q;
-
-  register unsigned char
-    *p;
 
   register ssize_t
     i,
     x;
+
+  register unsigned char
+    *p;
 
   ssize_t
     count,
@@ -174,13 +176,13 @@ static Image *ReadHDRImage(const ImageInfo *image_info,ExceptionInfo *exception)
     Open image file.
   */
   assert(image_info != (const ImageInfo *) NULL);
-  assert(image_info->signature == MagickSignature);
+  assert(image_info->signature == MagickCoreSignature);
   if (image_info->debug != MagickFalse)
     (void) LogMagickEvent(TraceEvent,GetMagickModule(),"%s",
       image_info->filename);
   assert(exception != (ExceptionInfo *) NULL);
-  assert(exception->signature == MagickSignature);
-  image=AcquireImage(image_info);
+  assert(exception->signature == MagickCoreSignature);
+  image=AcquireImage(image_info,exception);
   status=OpenBlob(image_info,image,ReadBinaryBlobMode,exception);
   if (status == MagickFalse)
     {
@@ -215,7 +217,7 @@ static Image *ReadHDRImage(const ImageInfo *image_info,ExceptionInfo *exception)
         /*
           Read comment-- any text between # and end-of-line.
         */
-        length=MaxTextExtent;
+        length=MagickPathExtent;
         comment=AcquireString((char *) NULL);
         for (p=comment; comment != (char *) NULL; p++)
         {
@@ -227,7 +229,7 @@ static Image *ReadHDRImage(const ImageInfo *image_info,ExceptionInfo *exception)
               *p='\0';
               length<<=1;
               comment=(char *) ResizeQuantumMemory(comment,length+
-                MaxTextExtent,sizeof(*comment));
+                MagickPathExtent,sizeof(*comment));
               if (comment == (char *) NULL)
                 break;
               p=comment+strlen(comment);
@@ -237,7 +239,7 @@ static Image *ReadHDRImage(const ImageInfo *image_info,ExceptionInfo *exception)
         if (comment == (char *) NULL)
           ThrowReaderException(ResourceLimitError,"MemoryAllocationFailed");
         *p='\0';
-        (void) SetImageProperty(image,"comment",comment);
+        (void) SetImageProperty(image,"comment",comment,exception);
         comment=DestroyString(comment);
         c=ReadBlobByte(image);
       }
@@ -255,7 +257,7 @@ static Image *ReadHDRImage(const ImageInfo *image_info,ExceptionInfo *exception)
           p=keyword;
           do
           {
-            if ((size_t) (p-keyword) < (MaxTextExtent-1))
+            if ((size_t) (p-keyword) < (MagickPathExtent-1))
               *p++=c;
             c=ReadBlobByte(image);
           } while (isalnum(c) || (c == '_'));
@@ -272,9 +274,9 @@ static Image *ReadHDRImage(const ImageInfo *image_info,ExceptionInfo *exception)
           if (value_expected == MagickFalse)
             continue;
           p=value;
-          while ((c != '\n') && (c != '\0'))
+          while ((c != '\n') && (c != '\0') && (c != EOF))
           {
-            if ((size_t) (p-value) < (MaxTextExtent-1))
+            if ((size_t) (p-value) < (MagickPathExtent-1))
               *p++=c;
             c=ReadBlobByte(image);
           }
@@ -289,11 +291,11 @@ static Image *ReadHDRImage(const ImageInfo *image_info,ExceptionInfo *exception)
             {
               if (LocaleCompare(keyword,"format") == 0)
                 {
-                  (void) CopyMagickString(format,value,MaxTextExtent);
+                  (void) CopyMagickString(format,value,MagickPathExtent);
                   break;
                 }
-              (void) FormatLocaleString(tag,MaxTextExtent,"hdr:%s",keyword);
-              (void) SetImageProperty(image,tag,value);
+              (void) FormatLocaleString(tag,MagickPathExtent,"hdr:%s",keyword);
+              (void) SetImageProperty(image,tag,value,exception);
               break;
             }
             case 'G':
@@ -301,11 +303,11 @@ static Image *ReadHDRImage(const ImageInfo *image_info,ExceptionInfo *exception)
             {
               if (LocaleCompare(keyword,"gamma") == 0)
                 {
-                  image->gamma=InterpretLocaleValue(value,(char **) NULL);
+                  image->gamma=StringToDouble(value,(char **) NULL);
                   break;
                 }
-              (void) FormatLocaleString(tag,MaxTextExtent,"hdr:%s",keyword);
-              (void) SetImageProperty(image,tag,value);
+              (void) FormatLocaleString(tag,MagickPathExtent,"hdr:%s",keyword);
+              (void) SetImageProperty(image,tag,value,exception);
               break;
             }
             case 'P':
@@ -317,46 +319,57 @@ static Image *ReadHDRImage(const ImageInfo *image_info,ExceptionInfo *exception)
                     chromaticity[6],
                     white_point[2];
 
-                  (void) sscanf(value,"%g %g %g %g %g %g %g %g",
-                    &chromaticity[0],&chromaticity[1],&chromaticity[2],
-                    &chromaticity[3],&chromaticity[4],&chromaticity[5],
-                    &white_point[0],&white_point[1]);
-                  image->chromaticity.red_primary.x=chromaticity[0];
-                  image->chromaticity.red_primary.y=chromaticity[1];
-                  image->chromaticity.green_primary.x=chromaticity[2];
-                  image->chromaticity.green_primary.y=chromaticity[3];
-                  image->chromaticity.blue_primary.x=chromaticity[4];
-                  image->chromaticity.blue_primary.y=chromaticity[5];
-                  image->chromaticity.white_point.x=white_point[0],
-                  image->chromaticity.white_point.y=white_point[1];
+                  int
+                    count;
+
+                  count=sscanf(value,"%g %g %g %g %g %g %g %g",&chromaticity[0],
+                    &chromaticity[1],&chromaticity[2],&chromaticity[3],
+                    &chromaticity[4],&chromaticity[5],&white_point[0],
+                    &white_point[1]);
+                  if (count == 8)
+                    {
+                      image->chromaticity.red_primary.x=chromaticity[0];
+                      image->chromaticity.red_primary.y=chromaticity[1];
+                      image->chromaticity.green_primary.x=chromaticity[2];
+                      image->chromaticity.green_primary.y=chromaticity[3];
+                      image->chromaticity.blue_primary.x=chromaticity[4];
+                      image->chromaticity.blue_primary.y=chromaticity[5];
+                      image->chromaticity.white_point.x=white_point[0],
+                      image->chromaticity.white_point.y=white_point[1];
+                    }
                   break;
                 }
-              (void) FormatLocaleString(tag,MaxTextExtent,"hdr:%s",keyword);
-              (void) SetImageProperty(image,tag,value);
+              (void) FormatLocaleString(tag,MagickPathExtent,"hdr:%s",keyword);
+              (void) SetImageProperty(image,tag,value,exception);
               break;
             }
             case 'Y':
             case 'y':
             {
-              if (strcmp(keyword,"Y") == 0)
+              char
+                target[] = "Y";
+
+              if (strcmp(keyword,target) == 0)
                 {
                   int
                     height,
                     width;
 
-                  (void) sscanf(value,"%d +X %d",&height,&width);
-                  image->columns=(size_t) width;
-                  image->rows=(size_t) height;
+                  if (sscanf(value,"%d +X %d",&height,&width) == 2)
+                    {
+                      image->columns=(size_t) width;
+                      image->rows=(size_t) height;
+                    }
                   break;
                 }
-              (void) FormatLocaleString(tag,MaxTextExtent,"hdr:%s",keyword);
-              (void) SetImageProperty(image,tag,value);
+              (void) FormatLocaleString(tag,MagickPathExtent,"hdr:%s",keyword);
+              (void) SetImageProperty(image,tag,value,exception);
               break;
             }
             default:
             {
-              (void) FormatLocaleString(tag,MaxTextExtent,"hdr:%s",keyword);
-              (void) SetImageProperty(image,tag,value);
+              (void) FormatLocaleString(tag,MagickPathExtent,"hdr:%s",keyword);
+              (void) SetImageProperty(image,tag,value,exception);
               break;
             }
           }
@@ -370,8 +383,9 @@ static Image *ReadHDRImage(const ImageInfo *image_info,ExceptionInfo *exception)
     ThrowReaderException(CorruptImageError,"ImproperImageHeader");
   if ((image->columns == 0) || (image->rows == 0))
     ThrowReaderException(CorruptImageError,"NegativeOrZeroImageSize");
-  if (LocaleCompare(format,"32-bit_rle_rgbe") == 0)
-    image->colorspace=XYZColorspace;
+  (void) SetImageColorspace(image,RGBColorspace,exception);
+  if (LocaleCompare(format,"32-bit_rle_xyze") == 0)
+    (void) SetImageColorspace(image,XYZColorspace,exception);
   image->compression=(image->columns < 8) || (image->columns > 0x7ffff) ?
     NoCompression : RLECompression;
   if (image_info->ping != MagickFalse)
@@ -379,6 +393,9 @@ static Image *ReadHDRImage(const ImageInfo *image_info,ExceptionInfo *exception)
       (void) CloseBlob(image);
       return(GetFirstImageInList(image));
     }
+  status=SetImageExtent(image,image->columns,image->rows,exception);
+  if (status == MagickFalse)
+    return(DestroyImageList(image));
   /*
     Read RGBE (red+green+blue+exponent) pixels.
   */
@@ -443,7 +460,7 @@ static Image *ReadHDRImage(const ImageInfo *image_info,ExceptionInfo *exception)
           }
       }
     q=QueueAuthenticPixels(image,0,y,image->columns,1,exception);
-    if (q == (PixelPacket *) NULL)
+    if (q == (Quantum *) NULL)
       break;
     i=0;
     for (x=0; x < (ssize_t) image->columns; x++)
@@ -462,17 +479,17 @@ static Image *ReadHDRImage(const ImageInfo *image_info,ExceptionInfo *exception)
           pixel[2]=pixels[i++];
           pixel[3]=pixels[i++];
         }
-      SetRedPixelComponent(q,0);
-      SetGreenPixelComponent(q,0);
-      SetBluePixelComponent(q,0);
+      SetPixelRed(image,0,q);
+      SetPixelGreen(image,0,q);
+      SetPixelBlue(image,0,q);
       if (pixel[3] != 0)
         {
           gamma=pow(2.0,pixel[3]-(128.0+8.0));
-          SetRedPixelComponent(q,ClampToQuantum(QuantumRange*gamma*pixel[0]));
-          SetGreenPixelComponent(q,ClampToQuantum(QuantumRange*gamma*pixel[1]));
-          SetBluePixelComponent(q,ClampToQuantum(QuantumRange*gamma*pixel[2]));
+          SetPixelRed(image,ClampToQuantum(QuantumRange*gamma*pixel[0]),q);
+          SetPixelGreen(image,ClampToQuantum(QuantumRange*gamma*pixel[1]),q);
+          SetPixelBlue(image,ClampToQuantum(QuantumRange*gamma*pixel[2]),q);
         }
-      q++;
+      q+=GetPixelChannels(image);
     }
     if (SyncAuthenticPixels(image,exception) == MagickFalse)
       break;
@@ -516,11 +533,9 @@ ModuleExport size_t RegisterHDRImage(void)
   MagickInfo
     *entry;
 
-  entry=SetMagickInfo("HDR");
+  entry=AcquireMagickInfo("HDR","HDR","Radiance RGBE image format");
   entry->decoder=(DecodeImageHandler *) ReadHDRImage;
   entry->encoder=(EncodeImageHandler *) WriteHDRImage;
-  entry->description=ConstantString("Radiance RGBE image format");
-  entry->module=ConstantString("HDR");
   entry->magick=(IsImageFormatHandler *) IsHDR;
   (void) RegisterMagickInfo(entry);
   return(MagickImageCoderSignature);
@@ -566,7 +581,7 @@ ModuleExport void UnregisterHDRImage(void)
 %  The format of the WriteHDRImage method is:
 %
 %      MagickBooleanType WriteHDRImage(const ImageInfo *image_info,
-%        Image *image)
+%        Image *image,ExceptionInfo *exception)
 %
 %  A description of each parameter follows.
 %
@@ -640,10 +655,11 @@ static size_t HDRWriteRunlengthPixels(Image *image,unsigned char *pixels)
   return(p);
 }
 
-static MagickBooleanType WriteHDRImage(const ImageInfo *image_info,Image *image)
+static MagickBooleanType WriteHDRImage(const ImageInfo *image_info,Image *image,
+  ExceptionInfo *exception)
 {
   char
-    header[MaxTextExtent];
+    header[MagickPathExtent];
 
   const char
     *property;
@@ -651,7 +667,7 @@ static MagickBooleanType WriteHDRImage(const ImageInfo *image_info,Image *image)
   MagickBooleanType
     status;
 
-  register const PixelPacket
+  register const Quantum
     *p;
 
   register ssize_t
@@ -673,64 +689,68 @@ static MagickBooleanType WriteHDRImage(const ImageInfo *image_info,Image *image)
     Open output image file.
   */
   assert(image_info != (const ImageInfo *) NULL);
-  assert(image_info->signature == MagickSignature);
+  assert(image_info->signature == MagickCoreSignature);
   assert(image != (Image *) NULL);
-  assert(image->signature == MagickSignature);
+  assert(image->signature == MagickCoreSignature);
   if (image->debug != MagickFalse)
     (void) LogMagickEvent(TraceEvent,GetMagickModule(),"%s",image->filename);
-  status=OpenBlob(image_info,image,WriteBinaryBlobMode,&image->exception);
+  assert(exception != (ExceptionInfo *) NULL);
+  assert(exception->signature == MagickCoreSignature);
+  status=OpenBlob(image_info,image,WriteBinaryBlobMode,exception);
   if (status == MagickFalse)
     return(status);
-  if (image->colorspace != RGBColorspace)
-    (void) TransformImageColorspace(image,RGBColorspace);
+  if (IsRGBColorspace(image->colorspace) == MagickFalse)
+    (void) TransformImageColorspace(image,RGBColorspace,exception);
   /*
     Write header.
   */
-  (void) ResetMagickMemory(header,' ',MaxTextExtent);
-  length=CopyMagickString(header,"#?RGBE\n",MaxTextExtent);
+  (void) ResetMagickMemory(header,' ',MagickPathExtent);
+  length=CopyMagickString(header,"#?RGBE\n",MagickPathExtent);
   (void) WriteBlob(image,length,(unsigned char *) header);
-  property=GetImageProperty(image,"comment");
+  property=GetImageProperty(image,"comment",exception);
   if ((property != (const char *) NULL) &&
       (strchr(property,'\n') == (char *) NULL))
     {
-      count=FormatLocaleString(header,MaxTextExtent,"#%s\n",property);
+      count=FormatLocaleString(header,MagickPathExtent,"#%s\n",property);
       (void) WriteBlob(image,(size_t) count,(unsigned char *) header);
     }
-  property=GetImageProperty(image,"hdr:exposure");
+  property=GetImageProperty(image,"hdr:exposure",exception);
   if (property != (const char *) NULL)
     {
-      count=FormatLocaleString(header,MaxTextExtent,"EXPOSURE=%g\n",
-        atof(property));
+      count=FormatLocaleString(header,MagickPathExtent,"EXPOSURE=%g\n",
+        strtod(property,(char **) NULL));
       (void) WriteBlob(image,(size_t) count,(unsigned char *) header);
     }
   if (image->gamma != 0.0)
     {
-      count=FormatLocaleString(header,MaxTextExtent,"GAMMA=%g\n",image->gamma);
+      count=FormatLocaleString(header,MagickPathExtent,"GAMMA=%g\n",
+        image->gamma);
       (void) WriteBlob(image,(size_t) count,(unsigned char *) header);
     }
-  count=FormatLocaleString(header,MaxTextExtent,
+  count=FormatLocaleString(header,MagickPathExtent,
     "PRIMARIES=%g %g %g %g %g %g %g %g\n",
     image->chromaticity.red_primary.x,image->chromaticity.red_primary.y,
     image->chromaticity.green_primary.x,image->chromaticity.green_primary.y,
     image->chromaticity.blue_primary.x,image->chromaticity.blue_primary.y,
     image->chromaticity.white_point.x,image->chromaticity.white_point.y);
   (void) WriteBlob(image,(size_t) count,(unsigned char *) header);
-  length=CopyMagickString(header,"FORMAT=32-bit_rle_rgbe\n\n",MaxTextExtent);
+  length=CopyMagickString(header,"FORMAT=32-bit_rle_rgbe\n\n",MagickPathExtent);
   (void) WriteBlob(image,length,(unsigned char *) header);
-  count=FormatLocaleString(header,MaxTextExtent,"-Y %.20g +X %.20g\n",
+  count=FormatLocaleString(header,MagickPathExtent,"-Y %.20g +X %.20g\n",
     (double) image->rows,(double) image->columns);
   (void) WriteBlob(image,(size_t) count,(unsigned char *) header);
   /*
     Write HDR pixels.
   */
-  pixels=(unsigned char *) AcquireQuantumMemory(image->columns,4*
+  pixels=(unsigned char *) AcquireQuantumMemory(image->columns+128,4*
     sizeof(*pixels));
   if (pixels == (unsigned char *) NULL)
     ThrowWriterException(ResourceLimitError,"MemoryAllocationFailed");
+  (void) ResetMagickMemory(pixels,0,4*(image->columns+128)*sizeof(*pixels));
   for (y=0; y < (ssize_t) image->rows; y++)
   {
-    p=GetVirtualPixels(image,0,y,image->columns,1,&image->exception);
-    if (p == (const PixelPacket *) NULL)
+    p=GetVirtualPixels(image,0,y,image->columns,1,exception);
+    if (p == (const Quantum *) NULL)
       break;
     if ((image->columns >= 8) && (image->columns <= 0x7ffff))
       {
@@ -752,22 +772,20 @@ static MagickBooleanType WriteHDRImage(const ImageInfo *image_info,Image *image)
       pixel[1]=0;
       pixel[2]=0;
       pixel[3]=0;
-      gamma=QuantumScale*GetRedPixelComponent(p);
-      if ((QuantumScale*GetGreenPixelComponent(p)) > gamma)
-        gamma=QuantumScale*GetGreenPixelComponent(p);
-      if ((QuantumScale*GetBluePixelComponent(p)) > gamma)
-        gamma=QuantumScale*GetBluePixelComponent(p);
+      gamma=QuantumScale*GetPixelRed(image,p);
+      if ((QuantumScale*GetPixelGreen(image,p)) > gamma)
+        gamma=QuantumScale*GetPixelGreen(image,p);
+      if ((QuantumScale*GetPixelBlue(image,p)) > gamma)
+        gamma=QuantumScale*GetPixelBlue(image,p);
       if (gamma > MagickEpsilon)
         {
           int
             exponent;
 
           gamma=frexp(gamma,&exponent)*256.0/gamma;
-          pixel[0]=(unsigned char) (gamma*QuantumScale*GetRedPixelComponent(p));
-          pixel[1]=(unsigned char) (gamma*QuantumScale*
-            GetGreenPixelComponent(p));
-          pixel[2]=(unsigned char) (gamma*QuantumScale*
-            GetBluePixelComponent(p));
+          pixel[0]=(unsigned char) (gamma*QuantumScale*GetPixelRed(image,p));
+          pixel[1]=(unsigned char) (gamma*QuantumScale*GetPixelGreen(image,p));
+          pixel[2]=(unsigned char) (gamma*QuantumScale*GetPixelBlue(image,p));
           pixel[3]=(unsigned char) (exponent+128);
         }
       if ((image->columns >= 8) && (image->columns <= 0x7ffff))
@@ -784,7 +802,7 @@ static MagickBooleanType WriteHDRImage(const ImageInfo *image_info,Image *image)
           pixels[i++]=pixel[2];
           pixels[i++]=pixel[3];
         }
-      p++;
+      p+=GetPixelChannels(image);
     }
     if ((image->columns >= 8) && (image->columns <= 0x7ffff))
       {
@@ -793,8 +811,8 @@ static MagickBooleanType WriteHDRImage(const ImageInfo *image_info,Image *image)
       }
     else
       {
-        count=WriteBlob(image,4*image->columns*sizeof(*pixel),pixel);
-        if (count != (ssize_t) (4*image->columns*sizeof(*pixel)))
+        count=WriteBlob(image,4*image->columns*sizeof(*pixels),pixels);
+        if (count != (ssize_t) (4*image->columns*sizeof(*pixels)))
           break;
       }
     status=SetImageProgress(image,SaveImageTag,(MagickOffsetType) y,

@@ -1,5 +1,5 @@
 #!/usr/bin/perl
-#  Copyright 1999-2011 ImageMagick Studio LLC, a non-profit organization
+#  Copyright 1999-2016 ImageMagick Studio LLC, a non-profit organization
 #  dedicated to making software imaging solutions freely available.
 #
 #  You may not use this file except in compliance with the License.  You may
@@ -31,7 +31,7 @@ $image=Image::Magick->new( magick=>'MIFF' );
 $image->BlobToImage( @blob );
 
 if ($image->Get('signature') ne 
-    'a698f2fe0c6c31f83d19554a6ec02bac79c961dd9a87e7ed217752e75eb615d7')
+    'f7b3db46d6f696ea8392f0ad0be945dd502a806e2c1e9c082efef517191758f7')
   { print "not ok $test\n"; }
 else
   { print "ok $test\n"; }

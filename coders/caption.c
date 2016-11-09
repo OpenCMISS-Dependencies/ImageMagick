@@ -13,11 +13,11 @@
 %                             Read Text Caption.                              %
 %                                                                             %
 %                              Software Design                                %
-%                                John Cristy                                  %
+%                                   Cristy                                    %
 %                               February 2002                                 %
 %                                                                             %
 %                                                                             %
-%  Copyright 1999-2011 ImageMagick Studio LLC, a non-profit organization      %
+%  Copyright 1999-2016 ImageMagick Studio LLC, a non-profit organization      %
 %  dedicated to making software imaging solutions freely available.           %
 %                                                                             %
 %  You may not use this file except in compliance with the License.  You may  %
@@ -39,24 +39,29 @@
 /*
   Include declarations.
 */
-#include "magick/studio.h"
-#include "magick/annotate.h"
-#include "magick/blob.h"
-#include "magick/blob-private.h"
-#include "magick/draw.h"
-#include "magick/exception.h"
-#include "magick/exception-private.h"
-#include "magick/image.h"
-#include "magick/image-private.h"
-#include "magick/list.h"
-#include "magick/magick.h"
-#include "magick/memory_.h"
-#include "magick/option.h"
-#include "magick/property.h"
-#include "magick/quantum-private.h"
-#include "magick/static.h"
-#include "magick/string_.h"
-#include "magick/module.h"
+#include "MagickCore/studio.h"
+#include "MagickCore/annotate.h"
+#include "MagickCore/artifact.h"
+#include "MagickCore/blob.h"
+#include "MagickCore/blob-private.h"
+#include "MagickCore/composite-private.h"
+#include "MagickCore/draw.h"
+#include "MagickCore/draw-private.h"
+#include "MagickCore/exception.h"
+#include "MagickCore/exception-private.h"
+#include "MagickCore/image.h"
+#include "MagickCore/image-private.h"
+#include "MagickCore/list.h"
+#include "MagickCore/magick.h"
+#include "MagickCore/memory_.h"
+#include "MagickCore/module.h"
+#include "MagickCore/option.h"
+#include "MagickCore/property.h"
+#include "MagickCore/quantum-private.h"
+#include "MagickCore/static.h"
+#include "MagickCore/string_.h"
+#include "MagickCore/string-private.h"
+#include "MagickCore/utility.h"
 
 /*
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -90,11 +95,13 @@ static Image *ReadCAPTIONImage(const ImageInfo *image_info,
 {
   char
     *caption,
-    geometry[MaxTextExtent],
-    *property;
+    geometry[MagickPathExtent],
+    *property,
+    *text;
 
   const char
-    *gravity;
+    *gravity,
+    *option;
 
   DrawInfo
     *draw_info;
@@ -103,6 +110,7 @@ static Image *ReadCAPTIONImage(const ImageInfo *image_info,
     *image;
 
   MagickBooleanType
+    split,
     status;
 
   register ssize_t
@@ -119,111 +127,172 @@ static Image *ReadCAPTIONImage(const ImageInfo *image_info,
     Initialize Image structure.
   */
   assert(image_info != (const ImageInfo *) NULL);
-  assert(image_info->signature == MagickSignature);
+  assert(image_info->signature == MagickCoreSignature);
   if (image_info->debug != MagickFalse)
     (void) LogMagickEvent(TraceEvent,GetMagickModule(),"%s",
       image_info->filename);
   assert(exception != (ExceptionInfo *) NULL);
-  assert(exception->signature == MagickSignature);
-  image=AcquireImage(image_info);
-  if (image->columns == 0)
-    ThrowReaderException(OptionError,"MustSpecifyImageSize");
+  assert(exception->signature == MagickCoreSignature);
+  image=AcquireImage(image_info,exception);
   (void) ResetImagePage(image,"0x0+0+0");
   /*
     Format caption.
   */
-  property=InterpretImageProperties(image_info,image,image_info->filename);
-  (void) SetImageProperty(image,"caption",property);
+  option=GetImageOption(image_info,"filename");
+  if (option == (const char *) NULL)
+    property=InterpretImageProperties((ImageInfo *) image_info,image,
+      image_info->filename,exception);
+  else
+    if (LocaleNCompare(option,"caption:",8) == 0)
+      property=InterpretImageProperties((ImageInfo *) image_info,image,option+8,
+        exception);
+    else
+      property=InterpretImageProperties((ImageInfo *) image_info,image,option,
+        exception);
+  (void) SetImageProperty(image,"caption",property,exception);
   property=DestroyString(property);
-  caption=ConstantString(GetImageProperty(image,"caption"));
+  caption=ConstantString(GetImageProperty(image,"caption",exception));
   draw_info=CloneDrawInfo(image_info,(DrawInfo *) NULL);
-  draw_info->text=ConstantString(caption);
+  (void) CloneString(&draw_info->text,caption);
   gravity=GetImageOption(image_info,"gravity");
   if (gravity != (char *) NULL)
     draw_info->gravity=(GravityType) ParseCommandOption(MagickGravityOptions,
       MagickFalse,gravity);
-  if ((*caption != '\0') && (image->rows != 0) &&
-      (image_info->pointsize == 0.0))
+  split=MagickFalse;
+  if (image->columns == 0)
     {
-      char
-        *text;
-
-      /*
-        Scale text to fit bounding box.
-      */
-      for ( ; ; )
-      {
-        text=AcquireString(caption);
-        i=FormatMagickCaption(image,draw_info,MagickFalse,&metrics,&text);
-        (void) CloneString(&draw_info->text,text);
-        text=DestroyString(text);
-        (void) FormatLocaleString(geometry,MaxTextExtent,"%+g%+g",
-          -metrics.bounds.x1,metrics.ascent);
-        if (draw_info->gravity == UndefinedGravity)
-          (void) CloneString(&draw_info->geometry,geometry);
-        status=GetMultilineTypeMetrics(image,draw_info,&metrics);
-        (void) status;
-        width=(size_t) floor(metrics.width+draw_info->stroke_width+0.5);
-        height=(size_t) floor(metrics.height+draw_info->stroke_width+0.5);
-        if ((width > (image->columns+1)) || (height > (image->rows+1)))
-          break;
-        draw_info->pointsize*=2.0;
-      }
-      draw_info->pointsize/=2.0;
-      for ( ; ; )
-      {
-        text=AcquireString(caption);
-        i=FormatMagickCaption(image,draw_info,MagickFalse,&metrics,&text);
-        (void) CloneString(&draw_info->text,text);
-        text=DestroyString(text);
-        (void) FormatLocaleString(geometry,MaxTextExtent,"%+g%+g",
-          -metrics.bounds.x1,metrics.ascent);
-        if (draw_info->gravity == UndefinedGravity)
-          (void) CloneString(&draw_info->geometry,geometry);
-        status=GetMultilineTypeMetrics(image,draw_info,&metrics);
-        width=(size_t) floor(metrics.width+draw_info->stroke_width+0.5);
-        height=(size_t) floor(metrics.height+draw_info->stroke_width+0.5);
-        if ((width > (image->columns+1)) || (height > (image->rows+1)))
-          break;
-        draw_info->pointsize++;
-      }
-      draw_info->pointsize--;
+      text=AcquireString(caption);
+      i=FormatMagickCaption(image,draw_info,split,&metrics,&text,
+        exception);
+      (void) CloneString(&draw_info->text,text);
+      text=DestroyString(text);
+      (void) FormatLocaleString(geometry,MagickPathExtent,"%+g%+g",
+        -metrics.bounds.x1,metrics.ascent);
+      if (draw_info->gravity == UndefinedGravity)
+        (void) CloneString(&draw_info->geometry,geometry);
+      status=GetMultilineTypeMetrics(image,draw_info,&metrics,exception);
+      width=(size_t) floor(metrics.width+draw_info->stroke_width+0.5);
+      image->columns=width;
     }
-  i=FormatMagickCaption(image,draw_info,MagickTrue,&metrics,&caption);
   if (image->rows == 0)
-    image->rows=(size_t) ((i+1)*(metrics.ascent-metrics.descent+
-      draw_info->interline_spacing+draw_info->stroke_width)+0.5);
-  if (image->rows == 0)
-    image->rows=(size_t) ((i+1)*draw_info->pointsize+
-      draw_info->interline_spacing+draw_info->stroke_width+0.5);
-  if (SetImageBackgroundColor(image) == MagickFalse)
     {
-      InheritException(exception,&image->exception);
+      split=MagickTrue;
+      text=AcquireString(caption);
+      i=FormatMagickCaption(image,draw_info,split,&metrics,&text,exception);
+      (void) CloneString(&draw_info->text,text);
+      text=DestroyString(text);
+      (void) FormatLocaleString(geometry,MagickPathExtent,"%+g%+g",
+        -metrics.bounds.x1,metrics.ascent);
+      if (draw_info->gravity == UndefinedGravity)
+        (void) CloneString(&draw_info->geometry,geometry);
+      status=GetMultilineTypeMetrics(image,draw_info,&metrics,exception);
+      image->rows=(size_t) ((i+1)*(metrics.ascent-metrics.descent+
+        draw_info->interline_spacing+draw_info->stroke_width)+0.5);
+    }
+  status=SetImageExtent(image,image->columns,image->rows,exception);
+  if (status == MagickFalse)
+    { 
+      draw_info=DestroyDrawInfo(draw_info);
+      return(DestroyImageList(image));
+    }
+  if (SetImageBackgroundColor(image,exception) == MagickFalse)
+    {
+      draw_info=DestroyDrawInfo(draw_info);
       image=DestroyImageList(image);
       return((Image *) NULL);
+    }
+  if ((fabs(image_info->pointsize) < MagickEpsilon) && (strlen(caption) > 0))
+    {
+      double
+        high,
+        low;
+
+      /*
+        Auto fit text into bounding box.
+      */
+      for ( ; ; draw_info->pointsize*=2.0)
+      {
+        text=AcquireString(caption);
+        i=FormatMagickCaption(image,draw_info,split,&metrics,&text,
+          exception);
+        (void) CloneString(&draw_info->text,text);
+        text=DestroyString(text);
+        (void) FormatLocaleString(geometry,MagickPathExtent,"%+g%+g",
+          -metrics.bounds.x1,metrics.ascent);
+        if (draw_info->gravity == UndefinedGravity)
+          (void) CloneString(&draw_info->geometry,geometry);
+        status=GetMultilineTypeMetrics(image,draw_info,&metrics,exception);
+        width=(size_t) floor(metrics.width+draw_info->stroke_width+0.5);
+        height=(size_t) floor(metrics.height+draw_info->stroke_width+0.5);
+        if ((image->columns != 0) && (image->rows != 0))
+          {
+            if ((width >= image->columns) && (height >= image->rows))
+              break;
+          }
+        else
+          if (((image->columns != 0) && (width >= image->columns)) ||
+              ((image->rows != 0) && (height >= image->rows)))
+            break;
+      }
+      high=draw_info->pointsize;
+      for (low=1.0; (high-low) > 0.5; )
+      {
+        draw_info->pointsize=(low+high)/2.0;
+        text=AcquireString(caption);
+        i=FormatMagickCaption(image,draw_info,split,&metrics,&text,
+          exception);
+        (void) CloneString(&draw_info->text,text);
+        text=DestroyString(text);
+        (void) FormatLocaleString(geometry,MagickPathExtent,"%+g%+g",
+          -metrics.bounds.x1,metrics.ascent);
+        if (draw_info->gravity == UndefinedGravity)
+          (void) CloneString(&draw_info->geometry,geometry);
+        status=GetMultilineTypeMetrics(image,draw_info,&metrics,exception);
+        width=(size_t) floor(metrics.width+draw_info->stroke_width+0.5);
+        height=(size_t) floor(metrics.height+draw_info->stroke_width+0.5);
+        if ((image->columns != 0) && (image->rows != 0))
+          {
+            if ((width < image->columns) && (height < image->rows))
+              low=draw_info->pointsize+0.5;
+            else
+              high=draw_info->pointsize-0.5;
+          }
+        else
+          if (((image->columns != 0) && (width < image->columns)) ||
+              ((image->rows != 0) && (height < image->rows)))
+            low=draw_info->pointsize+0.5;
+          else
+            high=draw_info->pointsize-0.5;
+      }
+      draw_info->pointsize=floor((low+high)/2.0-0.5);
     }
   /*
     Draw caption.
   */
+  i=FormatMagickCaption(image,draw_info,split,&metrics,&caption,exception);
   (void) CloneString(&draw_info->text,caption);
-  status=GetMultilineTypeMetrics(image,draw_info,&metrics);
-  if ((draw_info->gravity != UndefinedGravity) &&
-      (draw_info->direction != RightToLeftDirection))
-    image->page.x=(ssize_t) (metrics.bounds.x1-draw_info->stroke_width/2.0);
-  else
-    {
-      (void) FormatLocaleString(geometry,MaxTextExtent,"%+g%+g",
-        -metrics.bounds.x1+draw_info->stroke_width/2.0,metrics.ascent+
-        draw_info->stroke_width/2.0);
-      if (draw_info->direction == RightToLeftDirection)
-        (void) FormatLocaleString(geometry,MaxTextExtent,"%+g%+g",
-          image->columns-(metrics.bounds.x2+draw_info->stroke_width/2.0),
-          metrics.ascent+draw_info->stroke_width/2.0);
-      draw_info->geometry=AcquireString(geometry);
+  (void) FormatLocaleString(geometry,MagickPathExtent,"%+g%+g",MagickMax(
+    draw_info->direction == RightToLeftDirection ? image->columns-
+    metrics.bounds.x2 : -metrics.bounds.x1,0.0),draw_info->gravity ==
+    UndefinedGravity ? metrics.ascent : 0.0);
+  draw_info->geometry=AcquireString(geometry);
+  status=AnnotateImage(image,draw_info,exception);
+  if (image_info->pointsize == 0.0)
+    { 
+      char
+        pointsize[MagickPathExtent];
+      
+      (void) FormatLocaleString(pointsize,MagickPathExtent,"%.20g",
+        draw_info->pointsize);
+      (void) SetImageProperty(image,"caption:pointsize",pointsize,exception);
     }
-  (void) AnnotateImage(image,draw_info);
   draw_info=DestroyDrawInfo(draw_info);
   caption=DestroyString(caption);
+  if (status == MagickFalse)
+    {
+      image=DestroyImageList(image);
+      return((Image *) NULL);
+    }
   return(GetFirstImageInList(image));
 }
 
@@ -255,12 +324,9 @@ ModuleExport size_t RegisterCAPTIONImage(void)
   MagickInfo
     *entry;
 
-  entry=SetMagickInfo("CAPTION");
+  entry=AcquireMagickInfo("CAPTION","CAPTION","Caption");
   entry->decoder=(DecodeImageHandler *) ReadCAPTIONImage;
-  entry->adjoin=MagickFalse;
-  entry->format_type=ImplicitFormatType;
-  entry->description=ConstantString("Image caption");
-  entry->module=ConstantString("CAPTION");
+  entry->flags^=CoderAdjoinFlag;
   (void) RegisterMagickInfo(entry);
   return(MagickImageCoderSignature);
 }

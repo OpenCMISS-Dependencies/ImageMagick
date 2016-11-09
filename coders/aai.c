@@ -13,11 +13,11 @@
 %                        Read/Write AAI X Image Format                        %
 %                                                                             %
 %                              Software Design                                %
-%                                John Cristy                                  %
+%                                   Cristy                                    %
 %                                 July 1992                                   %
 %                                                                             %
 %                                                                             %
-%  Copyright 1999-2011 ImageMagick Studio LLC, a non-profit organization      %
+%  Copyright 1999-2016 ImageMagick Studio LLC, a non-profit organization      %
 %  dedicated to making software imaging solutions freely available.           %
 %                                                                             %
 %  You may not use this file except in compliance with the License.  You may  %
@@ -39,30 +39,33 @@
 /*
   Include declarations.
 */
-#include "magick/studio.h"
-#include "magick/blob.h"
-#include "magick/blob-private.h"
-#include "magick/cache.h"
-#include "magick/colorspace.h"
-#include "magick/exception.h"
-#include "magick/exception-private.h"
-#include "magick/image.h"
-#include "magick/image-private.h"
-#include "magick/list.h"
-#include "magick/magick.h"
-#include "magick/memory_.h"
-#include "magick/monitor.h"
-#include "magick/monitor-private.h"
-#include "magick/quantum-private.h"
-#include "magick/static.h"
-#include "magick/string_.h"
-#include "magick/module.h"
+#include "MagickCore/studio.h"
+#include "MagickCore/blob.h"
+#include "MagickCore/blob-private.h"
+#include "MagickCore/cache.h"
+#include "MagickCore/colorspace.h"
+#include "MagickCore/colorspace-private.h"
+#include "MagickCore/exception.h"
+#include "MagickCore/exception-private.h"
+#include "MagickCore/image.h"
+#include "MagickCore/image-private.h"
+#include "MagickCore/list.h"
+#include "MagickCore/magick.h"
+#include "MagickCore/memory_.h"
+#include "MagickCore/monitor.h"
+#include "MagickCore/monitor-private.h"
+#include "MagickCore/pixel.h"
+#include "MagickCore/pixel-accessor.h"
+#include "MagickCore/quantum-private.h"
+#include "MagickCore/static.h"
+#include "MagickCore/string_.h"
+#include "MagickCore/module.h"
 
 /*
   Forward declarations.
 */
 static MagickBooleanType
-  WriteAAIImage(const ImageInfo *,Image *);
+  WriteAAIImage(const ImageInfo *,Image *,ExceptionInfo *);
 
 /*
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -101,7 +104,7 @@ static Image *ReadAAIImage(const ImageInfo *image_info,ExceptionInfo *exception)
   register ssize_t
     x;
 
-  register PixelPacket
+  register Quantum
     *q;
 
   register unsigned char
@@ -123,13 +126,13 @@ static Image *ReadAAIImage(const ImageInfo *image_info,ExceptionInfo *exception)
     Open image file.
   */
   assert(image_info != (const ImageInfo *) NULL);
-  assert(image_info->signature == MagickSignature);
+  assert(image_info->signature == MagickCoreSignature);
   if (image_info->debug != MagickFalse)
     (void) LogMagickEvent(TraceEvent,GetMagickModule(),"%s",
       image_info->filename);
   assert(exception != (ExceptionInfo *) NULL);
-  assert(exception->signature == MagickSignature);
-  image=AcquireImage(image_info);
+  assert(exception->signature == MagickCoreSignature);
+  image=AcquireImage(image_info,exception);
   status=OpenBlob(image_info,image,ReadBinaryBlobMode,exception);
   if (status == MagickFalse)
     {
@@ -156,6 +159,9 @@ static Image *ReadAAIImage(const ImageInfo *image_info,ExceptionInfo *exception)
     if ((image_info->ping != MagickFalse) && (image_info->number_scenes != 0))
       if (image->scene >= (image_info->scene+image_info->number_scenes-1))
         break;
+    status=SetImageExtent(image,image->columns,image->rows,exception);
+    if (status == MagickFalse)
+      return(DestroyImageList(image));
     pixels=(unsigned char *) AcquireQuantumMemory(image->columns,
       4*sizeof(*pixels));
     if (pixels == (unsigned char *) NULL) 
@@ -164,23 +170,23 @@ static Image *ReadAAIImage(const ImageInfo *image_info,ExceptionInfo *exception)
     for (y=0; y < (ssize_t) image->rows; y++)
     {
       count=ReadBlob(image,length,pixels);
-      if ((size_t) count != length)
+      if (count != (ssize_t) length)
         ThrowReaderException(CorruptImageError,"UnableToReadImageData");
       p=pixels;
       q=QueueAuthenticPixels(image,0,y,image->columns,1,exception);
-      if (q == (PixelPacket *) NULL)
+      if (q == (Quantum *) NULL)
         break;
       for (x=0; x < (ssize_t) image->columns; x++)
       {
-        SetBluePixelComponent(q,ScaleCharToQuantum(*p++));
-        SetGreenPixelComponent(q,ScaleCharToQuantum(*p++));
-        SetRedPixelComponent(q,ScaleCharToQuantum(*p++));
+        SetPixelBlue(image,ScaleCharToQuantum(*p++),q);
+        SetPixelGreen(image,ScaleCharToQuantum(*p++),q);
+        SetPixelRed(image,ScaleCharToQuantum(*p++),q);
         if (*p == 254)
           *p=255;
-        SetAlphaPixelComponent(q,ScaleCharToQuantum(*p++));
-        if (q->opacity != OpaqueOpacity)
-          image->matte=MagickTrue;
-        q++;
+        SetPixelAlpha(image,ScaleCharToQuantum(*p++),q);
+        if (GetPixelAlpha(image,q) != OpaqueAlpha)
+          image->alpha_trait=BlendPixelTrait;
+        q+=GetPixelChannels(image);
       }
       if (SyncAuthenticPixels(image,exception) == MagickFalse)
         break;
@@ -212,7 +218,7 @@ static Image *ReadAAIImage(const ImageInfo *image_info,ExceptionInfo *exception)
         /*
           Allocate next image structure.
         */
-        AcquireNextImage(image_info,image);
+        AcquireNextImage(image_info,image,exception);
         if (GetNextImageInList(image) == (Image *) NULL)
           {
             image=DestroyImageList(image);
@@ -256,11 +262,9 @@ ModuleExport size_t RegisterAAIImage(void)
   MagickInfo
     *entry;
 
-  entry=SetMagickInfo("AAI");
+  entry=AcquireMagickInfo("AAI","AAI","AAI Dune image");
   entry->decoder=(DecodeImageHandler *) ReadAAIImage;
   entry->encoder=(EncodeImageHandler *) WriteAAIImage;
-  entry->description=ConstantString("AAI Dune image");
-  entry->module=ConstantString("AAI");
   (void) RegisterMagickInfo(entry);
   return(MagickImageCoderSignature);
 }
@@ -304,7 +308,8 @@ ModuleExport void UnregisterAAIImage(void)
 %
 %  The format of the WriteAAIImage method is:
 %
-%      MagickBooleanType WriteAAIImage(const ImageInfo *image_info,Image *image)
+%      MagickBooleanType WriteAAIImage(const ImageInfo *image_info,
+%        Image *image,ExceptionInfo *exception)
 %
 %  A description of each parameter follows.
 %
@@ -312,8 +317,11 @@ ModuleExport void UnregisterAAIImage(void)
 %
 %    o image:  The image.
 %
+%    o exception: return any errors or warnings in this structure.
+%
 */
-static MagickBooleanType WriteAAIImage(const ImageInfo *image_info,Image *image)
+static MagickBooleanType WriteAAIImage(const ImageInfo *image_info,Image *image,
+  ExceptionInfo *exception)
 {
   MagickBooleanType
     status;
@@ -321,14 +329,14 @@ static MagickBooleanType WriteAAIImage(const ImageInfo *image_info,Image *image)
   MagickOffsetType
     scene;
 
-  register const PixelPacket
-    *restrict p;
+  register const Quantum
+    *magick_restrict p;
 
   register ssize_t
     x;
 
   register unsigned char
-    *restrict q;
+    *magick_restrict q;
 
   ssize_t
     count,
@@ -341,12 +349,14 @@ static MagickBooleanType WriteAAIImage(const ImageInfo *image_info,Image *image)
     Open output image file.
   */
   assert(image_info != (const ImageInfo *) NULL);
-  assert(image_info->signature == MagickSignature);
+  assert(image_info->signature == MagickCoreSignature);
   assert(image != (Image *) NULL);
-  assert(image->signature == MagickSignature);
+  assert(image->signature == MagickCoreSignature);
   if (image->debug != MagickFalse)
     (void) LogMagickEvent(TraceEvent,GetMagickModule(),"%s",image->filename);
-  status=OpenBlob(image_info,image,WriteBinaryBlobMode,&image->exception);
+  assert(exception != (ExceptionInfo *) NULL);
+  assert(exception->signature == MagickCoreSignature);
+  status=OpenBlob(image_info,image,WriteBinaryBlobMode,exception);
   if (status == MagickFalse)
     return(status);
   scene=0;
@@ -355,14 +365,13 @@ static MagickBooleanType WriteAAIImage(const ImageInfo *image_info,Image *image)
     /*
       Write AAI header.
     */
-    if (image->colorspace != RGBColorspace)
-      (void) TransformImageColorspace(image,RGBColorspace);
+    (void) TransformImageColorspace(image,sRGBColorspace,exception);
     (void) WriteBlobLSBLong(image,(unsigned int) image->columns);
     (void) WriteBlobLSBLong(image,(unsigned int) image->rows);
     /*
       Allocate memory for pixels.
     */
-    pixels=(unsigned char *) AcquireQuantumMemory((size_t) image->columns,
+    pixels=(unsigned char *) AcquireQuantumMemory(image->columns,
       4*sizeof(*pixels));
     if (pixels == (unsigned char *) NULL)
       ThrowWriterException(ResourceLimitError,"MemoryAllocationFailed");
@@ -371,20 +380,20 @@ static MagickBooleanType WriteAAIImage(const ImageInfo *image_info,Image *image)
     */
     for (y=0; y < (ssize_t) image->rows; y++)
     {
-      p=GetVirtualPixels(image,0,y,image->columns,1,&image->exception);
-      if (p == (PixelPacket *) NULL)
+      p=GetVirtualPixels(image,0,y,image->columns,1,exception);
+      if (p == (const Quantum *) NULL)
         break;
       q=pixels;
       for (x=0; x < (ssize_t) image->columns; x++)
       {
-        *q++=ScaleQuantumToChar(GetBluePixelComponent(p));
-        *q++=ScaleQuantumToChar(GetGreenPixelComponent(p));
-        *q++=ScaleQuantumToChar(GetRedPixelComponent(p));
-        *q=ScaleQuantumToChar((Quantum) (QuantumRange-(image->matte !=
-          MagickFalse ? GetOpacityPixelComponent(p) : OpaqueOpacity)));
+        *q++=ScaleQuantumToChar(GetPixelBlue(image,p));
+        *q++=ScaleQuantumToChar(GetPixelGreen(image,p));
+        *q++=ScaleQuantumToChar(GetPixelRed(image,p));
+        *q=ScaleQuantumToChar((Quantum) (image->alpha_trait !=
+          UndefinedPixelTrait ? GetPixelAlpha(image,p) : OpaqueAlpha));
         if (*q == 255)
           *q=254;
-        p++;
+        p+=GetPixelChannels(image);
         q++;
       }
       count=WriteBlob(image,(size_t) (q-pixels),pixels);

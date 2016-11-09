@@ -13,11 +13,11 @@
 %                    Read/Write Truevision Targa Image Format                 %
 %                                                                             %
 %                              Software Design                                %
-%                                John Cristy                                  %
+%                                   Cristy                                    %
 %                                 July 1992                                   %
 %                                                                             %
 %                                                                             %
-%  Copyright 1999-2011 ImageMagick Studio LLC, a non-profit organization      %
+%  Copyright 1999-2016 ImageMagick Studio LLC, a non-profit organization      %
 %  dedicated to making software imaging solutions freely available.           %
 %                                                                             %
 %  You may not use this file except in compliance with the License.  You may  %
@@ -39,34 +39,82 @@
 /*
   Include declarations.
 */
-#include "magick/studio.h"
-#include "magick/blob.h"
-#include "magick/blob-private.h"
-#include "magick/cache.h"
-#include "magick/color-private.h"
-#include "magick/colormap.h"
-#include "magick/colormap-private.h"
-#include "magick/colorspace.h"
-#include "magick/exception.h"
-#include "magick/exception-private.h"
-#include "magick/image.h"
-#include "magick/image-private.h"
-#include "magick/list.h"
-#include "magick/magick.h"
-#include "magick/memory_.h"
-#include "magick/monitor.h"
-#include "magick/monitor-private.h"
-#include "magick/property.h"
-#include "magick/quantum-private.h"
-#include "magick/static.h"
-#include "magick/string_.h"
-#include "magick/module.h"
+#include "MagickCore/studio.h"
+#include "MagickCore/artifact.h"
+#include "MagickCore/attribute.h"
+#include "MagickCore/blob.h"
+#include "MagickCore/blob-private.h"
+#include "MagickCore/cache.h"
+#include "MagickCore/color-private.h"
+#include "MagickCore/colormap.h"
+#include "MagickCore/colormap-private.h"
+#include "MagickCore/colorspace.h"
+#include "MagickCore/colorspace-private.h"
+#include "MagickCore/exception.h"
+#include "MagickCore/exception-private.h"
+#include "MagickCore/image.h"
+#include "MagickCore/image-private.h"
+#include "MagickCore/list.h"
+#include "MagickCore/magick.h"
+#include "MagickCore/memory_.h"
+#include "MagickCore/monitor.h"
+#include "MagickCore/monitor-private.h"
+#include "MagickCore/option.h"
+#include "MagickCore/pixel-accessor.h"
+#include "MagickCore/property.h"
+#include "MagickCore/quantum-private.h"
+#include "MagickCore/static.h"
+#include "MagickCore/string_.h"
+#include "MagickCore/module.h"
+
+/*
+  Enumerated declaractions.
+*/
+typedef enum
+{
+  TGAColormap = 1,
+  TGARGB = 2,
+  TGAMonochrome = 3,
+  TGARLEColormap = 9,
+  TGARLERGB = 10,
+  TGARLEMonochrome = 11
+} TGAImageType;
+
+/*
+  Typedef declaractions.
+*/
+typedef struct _TGAInfo
+{
+  TGAImageType
+    image_type;
+
+  unsigned char
+    id_length,
+    colormap_type;
+
+  unsigned short
+    colormap_index,
+    colormap_length;
+
+  unsigned char
+    colormap_size;
+
+  unsigned short
+    x_origin,
+    y_origin,
+    width,
+    height;
+
+  unsigned char
+    bits_per_pixel,
+    attributes;
+} TGAInfo;
 
 /*
   Forward declarations.
 */
 static MagickBooleanType
-  WriteTGAImage(const ImageInfo *,Image *);
+  WriteTGAImage(const ImageInfo *,Image *,ExceptionInfo *);
 
 /*
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -94,56 +142,22 @@ static MagickBooleanType
 %    o exception: return any errors or warnings in this structure.
 %
 */
-static Image *ReadTGAImage(const ImageInfo *image_info,ExceptionInfo *exception)
+static Image *ReadTGAImage(const ImageInfo *image_info,
+  ExceptionInfo *exception)
 {
-#define TGAColormap 1
-#define TGARGB 2
-#define TGAMonochrome 3
-#define TGARLEColormap  9
-#define TGARLERGB  10
-#define TGARLEMonochrome  11
-
-  typedef struct _TGAInfo
-  {
-    unsigned char
-      id_length,
-      colormap_type,
-      image_type;
-
-    unsigned short
-      colormap_index,
-      colormap_length;
-
-    unsigned char
-      colormap_size;
-
-    unsigned short
-      x_origin,
-      y_origin,
-      width,
-      height;
-
-    unsigned char
-      bits_per_pixel,
-      attributes;
-  } TGAInfo;
-
   Image
     *image;
-
-  IndexPacket
-    index;
 
   MagickBooleanType
     status;
 
-  PixelPacket
+  PixelInfo
     pixel;
 
-  register IndexPacket
-    *indexes;
+  Quantum
+    index;
 
-  register PixelPacket
+  register Quantum
     *q;
 
   register ssize_t
@@ -167,19 +181,23 @@ static Image *ReadTGAImage(const ImageInfo *image_info,ExceptionInfo *exception)
   unsigned char
     j,
     k,
+    pixels[4],
     runlength;
+
+  unsigned int
+    alpha_bits;
 
   /*
     Open image file.
   */
   assert(image_info != (const ImageInfo *) NULL);
-  assert(image_info->signature == MagickSignature);
+  assert(image_info->signature == MagickCoreSignature);
   if (image_info->debug != MagickFalse)
     (void) LogMagickEvent(TraceEvent,GetMagickModule(),"%s",
       image_info->filename);
   assert(exception != (ExceptionInfo *) NULL);
-  assert(exception->signature == MagickSignature);
-  image=AcquireImage(image_info);
+  assert(exception->signature == MagickCoreSignature);
+  image=AcquireImage(image_info,exception);
   status=OpenBlob(image_info,image,ReadBinaryBlobMode,exception);
   if (status == MagickFalse)
     {
@@ -191,7 +209,7 @@ static Image *ReadTGAImage(const ImageInfo *image_info,ExceptionInfo *exception)
   */
   count=ReadBlob(image,1,&tga_info.id_length);
   tga_info.colormap_type=(unsigned char) ReadBlobByte(image);
-  tga_info.image_type=(unsigned char) ReadBlobByte(image);
+  tga_info.image_type=(TGAImageType) ReadBlobByte(image);
   if ((count != 1) ||
       ((tga_info.image_type != TGAColormap) &&
        (tga_info.image_type != TGARGB) &&
@@ -222,7 +240,9 @@ static Image *ReadTGAImage(const ImageInfo *image_info,ExceptionInfo *exception)
   */
   image->columns=tga_info.width;
   image->rows=tga_info.height;
-  image->matte=(tga_info.attributes & 0x0FU) != 0 ? MagickTrue : MagickFalse;
+  alpha_bits=(tga_info.attributes & 0x0FU);
+  image->alpha_trait=(alpha_bits > 0) || (tga_info.bits_per_pixel == 32) ||
+    (tga_info.colormap_size == 32) ?  BlendPixelTrait : UndefinedPixelTrait;
   if ((tga_info.image_type != TGAColormap) &&
       (tga_info.image_type != TGARLEColormap))
     image->depth=(size_t) ((tga_info.bits_per_pixel <= 8) ? 8 :
@@ -241,12 +261,13 @@ static Image *ReadTGAImage(const ImageInfo *image_info,ExceptionInfo *exception)
     image->storage_class=PseudoClass;
   image->compression=NoCompression;
   if ((tga_info.image_type == TGARLEColormap) ||
-      (tga_info.image_type == TGARLEMonochrome))
+      (tga_info.image_type == TGARLEMonochrome) ||
+      (tga_info.image_type == TGARLERGB))
     image->compression=RLECompression;
   if (image->storage_class == PseudoClass)
     {
       if (tga_info.colormap_type != 0)
-        image->colors=tga_info.colormap_length;
+        image->colors=tga_info.colormap_index+tga_info.colormap_length;
       else
         {
           size_t
@@ -254,7 +275,7 @@ static Image *ReadTGAImage(const ImageInfo *image_info,ExceptionInfo *exception)
 
           one=1;
           image->colors=one << tga_info.bits_per_pixel;
-          if (AcquireImageColormap(image,image->colors) == MagickFalse)
+          if (AcquireImageColormap(image,image->colors,exception) == MagickFalse)
             ThrowReaderException(ResourceLimitError,"MemoryAllocationFailed");
         }
     }
@@ -271,26 +292,52 @@ static Image *ReadTGAImage(const ImageInfo *image_info,ExceptionInfo *exception)
       */
       length=(size_t) tga_info.id_length;
       comment=(char *) NULL;
-      if (~length >= (MaxTextExtent-1))
-        comment=(char *) AcquireQuantumMemory(length+MaxTextExtent,
+      if (~length >= (MagickPathExtent-1))
+        comment=(char *) AcquireQuantumMemory(length+MagickPathExtent,
           sizeof(*comment));
       if (comment == (char *) NULL)
         ThrowReaderException(ResourceLimitError,"MemoryAllocationFailed");
       count=ReadBlob(image,tga_info.id_length,(unsigned char *) comment);
       comment[tga_info.id_length]='\0';
-      (void) SetImageProperty(image,"comment",comment);
+      (void) SetImageProperty(image,"comment",comment,exception);
       comment=DestroyString(comment);
     }
+  if (tga_info.attributes & (1UL << 4))
+    {
+      if (tga_info.attributes & (1UL << 5))
+        SetImageArtifact(image,"tga:image-origin","TopRight");
+      else
+        SetImageArtifact(image,"tga:image-origin","BottomRight");
+    }
+  else
+    {
+      if (tga_info.attributes & (1UL << 5))
+        SetImageArtifact(image,"tga:image-origin","TopLeft");
+      else
+        SetImageArtifact(image,"tga:image-origin","BottomLeft");
+    }
+  if (image_info->ping != MagickFalse)
+    {
+      (void) CloseBlob(image);
+      return(image);
+    }
+  status=SetImageExtent(image,image->columns,image->rows,exception);
+  if (status == MagickFalse)
+    return(DestroyImageList(image));
   (void) ResetMagickMemory(&pixel,0,sizeof(pixel));
-  pixel.opacity=(Quantum) OpaqueOpacity;
+  pixel.alpha=(MagickRealType) OpaqueAlpha;
   if (tga_info.colormap_type != 0)
     {
       /*
         Read TGA raster colormap.
       */
-      if (AcquireImageColormap(image,image->colors) == MagickFalse)
+      if (image->colors < tga_info.colormap_index)
+        image->colors=tga_info.colormap_index;
+      if (AcquireImageColormap(image,image->colors,exception) == MagickFalse)
         ThrowReaderException(ResourceLimitError,"MemoryAllocationFailed");
-      for (i=0; i < (ssize_t) image->colors; i++)
+      for (i=0; i < (ssize_t) tga_info.colormap_index; i++)
+        image->colormap[i]=pixel;
+      for ( ; i < (ssize_t) image->colors; i++)
       {
         switch (tga_info.colormap_size)
         {
@@ -300,7 +347,8 @@ static Image *ReadTGAImage(const ImageInfo *image_info,ExceptionInfo *exception)
             /*
               Gray scale.
             */
-            pixel.red=ScaleCharToQuantum((unsigned char) ReadBlobByte(image));
+            pixel.red=(MagickRealType) ScaleCharToQuantum((unsigned char)
+              ReadBlobByte(image));
             pixel.green=pixel.red;
             pixel.blue=pixel.red;
             break;
@@ -317,21 +365,39 @@ static Image *ReadTGAImage(const ImageInfo *image_info,ExceptionInfo *exception)
             j=(unsigned char) ReadBlobByte(image);
             k=(unsigned char) ReadBlobByte(image);
             range=GetQuantumRange(5UL);
-            pixel.red=ScaleAnyToQuantum(1UL*(k & 0x7c) >> 2,range);
-            pixel.green=ScaleAnyToQuantum((1UL*(k & 0x03) << 3)+
-              (1UL*(j & 0xe0) >> 5),range);
-            pixel.blue=ScaleAnyToQuantum(1UL*(j & 0x1f),range);
+            pixel.red=(MagickRealType) ScaleAnyToQuantum(1UL*(k & 0x7c) >> 2,
+              range);
+            pixel.green=(MagickRealType) ScaleAnyToQuantum((1UL*(k & 0x03)
+              << 3)+(1UL*(j & 0xe0) >> 5),range);
+            pixel.blue=(MagickRealType) ScaleAnyToQuantum(1UL*(j & 0x1f),range);
             break;
           }
           case 24:
-          case 32:
           {
             /*
               8 bits each of blue, green and red.
             */
-            pixel.blue=ScaleCharToQuantum((unsigned char) ReadBlobByte(image));
-            pixel.green=ScaleCharToQuantum((unsigned char) ReadBlobByte(image));
-            pixel.red=ScaleCharToQuantum((unsigned char) ReadBlobByte(image));
+            pixel.blue=(MagickRealType) ScaleCharToQuantum((unsigned char)
+              ReadBlobByte(image));
+            pixel.green=(MagickRealType) ScaleCharToQuantum((unsigned char)
+              ReadBlobByte(image));
+            pixel.red=(MagickRealType) ScaleCharToQuantum((unsigned char)
+              ReadBlobByte(image));
+            break;
+          }
+          case 32:
+          {
+            /*
+              8 bits each of blue, green, red, and alpha.
+            */
+            pixel.blue=(MagickRealType) ScaleCharToQuantum((unsigned char)
+              ReadBlobByte(image));
+            pixel.green=(MagickRealType) ScaleCharToQuantum((unsigned char)
+              ReadBlobByte(image));
+            pixel.red=(MagickRealType) ScaleCharToQuantum((unsigned char)
+              ReadBlobByte(image));
+            pixel.alpha=(MagickRealType) ScaleCharToQuantum((unsigned char)
+              ReadBlobByte(image));
             break;
           }
         }
@@ -345,7 +411,7 @@ static Image *ReadTGAImage(const ImageInfo *image_info,ExceptionInfo *exception)
   flag=0;
   skip=MagickFalse;
   real=0;
-  index=(IndexPacket) 0;
+  index=0;
   runlength=0;
   offset=0;
   for (y=0; y < (ssize_t) image->rows; y++)
@@ -354,9 +420,8 @@ static Image *ReadTGAImage(const ImageInfo *image_info,ExceptionInfo *exception)
     if (((unsigned char) (tga_info.attributes & 0x20) >> 5) == 0)
       real=image->rows-real-1;
     q=QueueAuthenticPixels(image,0,(ssize_t) real,image->columns,1,exception);
-    if (q == (PixelPacket *) NULL)
+    if (q == (Quantum *) NULL)
       break;
-    indexes=GetAuthenticIndexQueue(image);
     for (x=0; x < (ssize_t) image->columns; x++)
     {
       if ((tga_info.image_type == TGARLEColormap) ||
@@ -371,7 +436,7 @@ static Image *ReadTGAImage(const ImageInfo *image_info,ExceptionInfo *exception)
           else
             {
               count=ReadBlob(image,1,&runlength);
-              if (count == 0)
+              if (count != 1)
                 ThrowReaderException(CorruptImageError,"UnableToReadImageData");
               flag=runlength & 0x80;
               if (flag != 0)
@@ -388,15 +453,18 @@ static Image *ReadTGAImage(const ImageInfo *image_info,ExceptionInfo *exception)
             /*
               Gray scale.
             */
-            index=(IndexPacket) ReadBlobByte(image);
+            index=(Quantum) ReadBlobByte(image);
             if (tga_info.colormap_type != 0)
               pixel=image->colormap[(ssize_t) ConstrainColormapIndex(image,
-                1UL*index)];
+                (ssize_t) index,exception)];
             else
               {
-                pixel.red=ScaleCharToQuantum((unsigned char) index);
-                pixel.green=ScaleCharToQuantum((unsigned char) index);
-                pixel.blue=ScaleCharToQuantum((unsigned char) index);
+                pixel.red=(MagickRealType) ScaleCharToQuantum((unsigned char)
+                  index);
+                pixel.green=(MagickRealType) ScaleCharToQuantum((unsigned char)
+                  index);
+                pixel.blue=(MagickRealType) ScaleCharToQuantum((unsigned char)
+                  index);
               }
             break;
           }
@@ -407,51 +475,68 @@ static Image *ReadTGAImage(const ImageInfo *image_info,ExceptionInfo *exception)
               range;
 
             /*
-              5 bits each of red green and blue.
+              5 bits each of RGB.
             */
-            j=(unsigned char) ReadBlobByte(image);
-            k=(unsigned char) ReadBlobByte(image);
+            if (ReadBlob(image,2,pixels) != 2)
+              ThrowReaderException(CorruptImageError,"UnableToReadImageData");
+            j=pixels[0];
+            k=pixels[1];
             range=GetQuantumRange(5UL);
-            pixel.red=ScaleAnyToQuantum(1UL*(k & 0x7c) >> 2,range);
-            pixel.green=ScaleAnyToQuantum((1UL*(k & 0x03) << 3)+
-              (1UL*(j & 0xe0) >> 5),range);
-            pixel.blue=ScaleAnyToQuantum(1UL*(j & 0x1f),range);
-            if (image->matte != MagickFalse)
-              pixel.opacity=(k & 0x80) == 0 ? (Quantum) OpaqueOpacity :
-                (Quantum) TransparentOpacity; 
+            pixel.red=(MagickRealType) ScaleAnyToQuantum(1UL*(k & 0x7c) >> 2,
+              range);
+            pixel.green=(MagickRealType) ScaleAnyToQuantum((1UL*
+              (k & 0x03) << 3)+(1UL*(j & 0xe0) >> 5),range);
+            pixel.blue=(MagickRealType) ScaleAnyToQuantum(1UL*(j & 0x1f),range);
+            if (image->alpha_trait != UndefinedPixelTrait)
+              pixel.alpha=(MagickRealType) ((k & 0x80) == 0 ? (Quantum)
+                TransparentAlpha : (Quantum) OpaqueAlpha);
             if (image->storage_class == PseudoClass)
-              index=ConstrainColormapIndex(image,((size_t) k << 8)+j);
+              index=(Quantum) ConstrainColormapIndex(image,((ssize_t) (k << 8))+
+                j,exception);
             break;
           }
           case 24:
+          {
+            /*
+              BGR pixels.
+            */
+            if (ReadBlob(image,3,pixels) != 3)
+              ThrowReaderException(CorruptImageError,"UnableToReadImageData");
+            pixel.blue=(MagickRealType) ScaleCharToQuantum(pixels[0]);
+            pixel.green=(MagickRealType) ScaleCharToQuantum(pixels[1]);
+            pixel.red=(MagickRealType) ScaleCharToQuantum(pixels[2]);
+            break;
+          }
           case 32:
           {
             /*
-              8 bits each of blue green and red.
+              BGRA pixels.
             */
-            pixel.blue=ScaleCharToQuantum((unsigned char) ReadBlobByte(image));
-            pixel.green=ScaleCharToQuantum((unsigned char) ReadBlobByte(image));
-            pixel.red=ScaleCharToQuantum((unsigned char) ReadBlobByte(image));
-            if (tga_info.bits_per_pixel == 32)
-              pixel.opacity=(Quantum) (QuantumRange-ScaleCharToQuantum(
-                (unsigned char) ReadBlobByte(image)));
+            if (ReadBlob(image,4,pixels) != 4)
+              ThrowReaderException(CorruptImageError,"UnableToReadImageData");
+            pixel.blue=(MagickRealType) ScaleCharToQuantum(pixels[0]);
+            pixel.green=(MagickRealType) ScaleCharToQuantum(pixels[1]);
+            pixel.red=(MagickRealType) ScaleCharToQuantum(pixels[2]);
+            pixel.alpha=(MagickRealType) ScaleCharToQuantum(pixels[3]);
             break;
           }
         }
       if (status == MagickFalse)
         ThrowReaderException(CorruptImageError,"UnableToReadImageData");
       if (image->storage_class == PseudoClass)
-        SetIndexPixelComponent(indexes+x,index);
-      SetRedPixelComponent(q,pixel.red);
-      SetGreenPixelComponent(q,pixel.green);
-      SetBluePixelComponent(q,pixel.blue);
-      if (image->matte != MagickFalse)
-        SetOpacityPixelComponent(q,pixel.opacity);
-      q++;
+        SetPixelIndex(image,index,q);
+      SetPixelRed(image,ClampToQuantum(pixel.red),q);
+      SetPixelGreen(image,ClampToQuantum(pixel.green),q);
+      SetPixelBlue(image,ClampToQuantum(pixel.blue),q);
+      if (image->alpha_trait != UndefinedPixelTrait)
+        SetPixelAlpha(image,ClampToQuantum(pixel.alpha),q);
+      q+=GetPixelChannels(image);
     }
-    if (((unsigned char) (tga_info.attributes & 0xc0) >> 6) == 4)
-      offset+=4;
-    else
+    /*
+      if (((unsigned char) (tga_info.attributes & 0xc0) >> 6) == 4)
+        offset+=4;
+      else
+    */
       if (((unsigned char) (tga_info.attributes & 0xc0) >> 6) == 2)
         offset+=2;
       else
@@ -506,33 +591,25 @@ ModuleExport size_t RegisterTGAImage(void)
   MagickInfo
     *entry;
 
-  entry=SetMagickInfo("ICB");
+  entry=AcquireMagickInfo("TGA","ICB","Truevision Targa image");
   entry->decoder=(DecodeImageHandler *) ReadTGAImage;
   entry->encoder=(EncodeImageHandler *) WriteTGAImage;
-  entry->adjoin=MagickFalse;
-  entry->description=ConstantString("Truevision Targa image");
-  entry->module=ConstantString("TGA");
+  entry->flags^=CoderAdjoinFlag;
   (void) RegisterMagickInfo(entry);
-  entry=SetMagickInfo("TGA");
+  entry=AcquireMagickInfo("TGA","TGA","Truevision Targa image");
   entry->decoder=(DecodeImageHandler *) ReadTGAImage;
   entry->encoder=(EncodeImageHandler *) WriteTGAImage;
-  entry->adjoin=MagickFalse;
-  entry->description=ConstantString("Truevision Targa image");
-  entry->module=ConstantString("TGA");
+  entry->flags^=CoderAdjoinFlag;
   (void) RegisterMagickInfo(entry);
-  entry=SetMagickInfo("VDA");
+  entry=AcquireMagickInfo("TGA","VDA","Truevision Targa image");
   entry->decoder=(DecodeImageHandler *) ReadTGAImage;
   entry->encoder=(EncodeImageHandler *) WriteTGAImage;
-  entry->adjoin=MagickFalse;
-  entry->description=ConstantString("Truevision Targa image");
-  entry->module=ConstantString("TGA");
+  entry->flags^=CoderAdjoinFlag;
   (void) RegisterMagickInfo(entry);
-  entry=SetMagickInfo("VST");
+  entry=AcquireMagickInfo("TGA","VST","Truevision Targa image");
   entry->decoder=(DecodeImageHandler *) ReadTGAImage;
   entry->encoder=(EncodeImageHandler *) WriteTGAImage;
-  entry->adjoin=MagickFalse;
-  entry->description=ConstantString("Truevision Targa image");
-  entry->module=ConstantString("TGA");
+  entry->flags^=CoderAdjoinFlag;
   (void) RegisterMagickInfo(entry);
   return(MagickImageCoderSignature);
 }
@@ -580,7 +657,8 @@ ModuleExport void UnregisterTGAImage(void)
 %
 %  The format of the WriteTGAImage method is:
 %
-%      MagickBooleanType WriteTGAImage(const ImageInfo *image_info,Image *image)
+%      MagickBooleanType WriteTGAImage(const ImageInfo *image_info,
+%        Image *image,ExceptionInfo *exception)
 %
 %  A description of each parameter follows.
 %
@@ -589,58 +667,68 @@ ModuleExport void UnregisterTGAImage(void)
 %    o image:  The image.
 %
 */
-
-static inline size_t MagickMin(const size_t x,const size_t y)
+static inline void WriteTGAPixel(Image *image,TGAImageType image_type,
+  const Quantum *p,const QuantumAny range,const double midpoint)
 {
-  if (x < y)
-    return(x);
-  return(y);
+  if (image_type == TGAColormap || image_type == TGARLEColormap)
+    (void) WriteBlobByte(image,(unsigned char) GetPixelIndex(image,p));
+  else
+    {
+      if (image_type == TGAMonochrome || image_type == TGARLEMonochrome)
+        (void) WriteBlobByte(image,ScaleQuantumToChar(ClampToQuantum(
+          GetPixelLuma(image,p))));
+      else
+        if (image->depth == 5)
+          {
+            unsigned char
+              green,
+              value;
+
+            green=(unsigned char) ScaleQuantumToAny(GetPixelGreen(image,p),
+              range);
+            value=((unsigned char) ScaleQuantumToAny(GetPixelBlue(image,p),
+              range)) | ((green & 0x07) << 5);
+            (void) WriteBlobByte(image,value);
+            value=(((image->alpha_trait != UndefinedPixelTrait) &&
+              ((double) GetPixelAlpha(image,p) > midpoint)) ? 0x80 : 0) |
+              ((unsigned char) ScaleQuantumToAny(GetPixelRed(image,p),range) <<
+              2) | ((green & 0x18) >> 3);
+            (void) WriteBlobByte(image,value);
+          }
+        else
+          {
+            (void) WriteBlobByte(image,ScaleQuantumToChar(
+              GetPixelBlue(image,p)));
+            (void) WriteBlobByte(image,ScaleQuantumToChar(
+              GetPixelGreen(image,p)));
+            (void) WriteBlobByte(image,ScaleQuantumToChar(
+              GetPixelRed(image,p)));
+            if (image->alpha_trait != UndefinedPixelTrait)
+              (void) WriteBlobByte(image,ScaleQuantumToChar(
+                GetPixelAlpha(image,p)));
+          }
+    }
 }
 
-static MagickBooleanType WriteTGAImage(const ImageInfo *image_info,Image *image)
+static MagickBooleanType WriteTGAImage(const ImageInfo *image_info,Image *image,
+  ExceptionInfo *exception)
 {
-#define TargaColormap 1
-#define TargaRGB 2
-#define TargaMonochrome 3
-#define TargaRLEColormap  9
-#define TargaRLERGB  10
-#define TargaRLEMonochrome  11
-
-  typedef struct _TargaInfo
-  {
-    unsigned char
-      id_length,
-      colormap_type,
-      image_type;
-
-    unsigned short
-      colormap_index,
-      colormap_length;
-
-    unsigned char
-      colormap_size;
-
-    unsigned short
-      x_origin,
-      y_origin,
-      width,
-      height;
-
-    unsigned char
-      bits_per_pixel,
-      attributes;
-  } TargaInfo;
+  CompressionType
+    compression;
 
   const char
     *value;
 
+  const double
+    midpoint = QuantumRange/2.0;
+
   MagickBooleanType
     status;
 
-  register const IndexPacket
-    *indexes;
+  QuantumAny
+    range;
 
-  register const PixelPacket
+  register const Quantum
     *p;
 
   register ssize_t
@@ -652,26 +740,28 @@ static MagickBooleanType WriteTGAImage(const ImageInfo *image_info,Image *image)
   register unsigned char
     *q;
 
+  size_t
+    channels;
+
   ssize_t
     count,
     y;
 
-  TargaInfo
-    targa_info;
-
-  unsigned char
-    *targa_pixels;
+  TGAInfo
+    tga_info;
 
   /*
     Open output image file.
   */
   assert(image_info != (const ImageInfo *) NULL);
-  assert(image_info->signature == MagickSignature);
+  assert(image_info->signature == MagickCoreSignature);
   assert(image != (Image *) NULL);
-  assert(image->signature == MagickSignature);
+  assert(image->signature == MagickCoreSignature);
   if (image->debug != MagickFalse)
     (void) LogMagickEvent(TraceEvent,GetMagickModule(),"%s",image->filename);
-  status=OpenBlob(image_info,image,WriteBinaryBlobMode,&image->exception);
+  assert(exception != (ExceptionInfo *) NULL);
+  assert(exception->signature == MagickCoreSignature);
+  status=OpenBlob(image_info,image,WriteBinaryBlobMode,exception);
   if (status == MagickFalse)
     return(status);
   /*
@@ -679,40 +769,53 @@ static MagickBooleanType WriteTGAImage(const ImageInfo *image_info,Image *image)
   */
   if ((image->columns > 65535L) || (image->rows > 65535L))
     ThrowWriterException(ImageError,"WidthOrHeightExceedsLimit");
-  if (image->colorspace != RGBColorspace)
-    (void) TransformImageColorspace(image,RGBColorspace);
-  targa_info.id_length=0;
-  value=GetImageProperty(image,"comment");
+  (void) TransformImageColorspace(image,sRGBColorspace,exception);
+  compression=image->compression;
+  if (image_info->compression != UndefinedCompression)
+    compression=image_info->compression;
+  range=GetQuantumRange(5UL);
+  tga_info.id_length=0;
+  value=GetImageProperty(image,"comment",exception);
   if (value != (const char *) NULL)
-    targa_info.id_length=(unsigned char) MagickMin(strlen(value),255);
-  targa_info.colormap_type=0;
-  targa_info.colormap_index=0;
-  targa_info.colormap_length=0;
-  targa_info.colormap_size=0;
-  targa_info.x_origin=0;
-  targa_info.y_origin=0;
-  targa_info.width=(unsigned short) image->columns;
-  targa_info.height=(unsigned short) image->rows;
-  targa_info.bits_per_pixel=8;
-  targa_info.attributes=0;
+    tga_info.id_length=(unsigned char) MagickMin(strlen(value),255);
+  tga_info.colormap_type=0;
+  tga_info.colormap_index=0;
+  tga_info.colormap_length=0;
+  tga_info.colormap_size=0;
+  tga_info.x_origin=0;
+  tga_info.y_origin=0;
+  tga_info.width=(unsigned short) image->columns;
+  tga_info.height=(unsigned short) image->rows;
+  tga_info.bits_per_pixel=8;
+  tga_info.attributes=0;
   if ((image_info->type != TrueColorType) &&
-      (image_info->type != TrueColorMatteType) &&
+      (image_info->type != TrueColorAlphaType) &&
       (image_info->type != PaletteType) &&
-      (image->matte == MagickFalse) &&
-      (IsGrayImage(image,&image->exception) != MagickFalse))
-    targa_info.image_type=TargaMonochrome;
+      (image->alpha_trait == UndefinedPixelTrait) &&
+      (SetImageGray(image,exception) != MagickFalse))
+    tga_info.image_type=compression == RLECompression ? TGARLEMonochrome :
+      TGAMonochrome;
   else
     if ((image->storage_class == DirectClass) || (image->colors > 256))
       {
         /*
           Full color TGA raster.
         */
-        targa_info.image_type=TargaRGB;
-        targa_info.bits_per_pixel=24;
-        if (image->matte != MagickFalse)
+        tga_info.image_type=compression == RLECompression ? TGARLERGB : TGARGB;
+        if (image_info->depth == 5)
           {
-            targa_info.bits_per_pixel=32;
-            targa_info.attributes=8;  /* # of alpha bits */
+            tga_info.bits_per_pixel=16;
+            if (image->alpha_trait != UndefinedPixelTrait)
+              tga_info.attributes=1;  /* # of alpha bits */
+          }
+        else
+          {
+            tga_info.bits_per_pixel=24;
+            if (image->alpha_trait != UndefinedPixelTrait)
+              {
+                tga_info.bits_per_pixel=32;
+                tga_info.attributes=8;  /* # of alpha bits */
+              }
           }
       }
     else
@@ -720,88 +823,168 @@ static MagickBooleanType WriteTGAImage(const ImageInfo *image_info,Image *image)
         /*
           Colormapped TGA raster.
         */
-        targa_info.image_type=TargaColormap;
-        targa_info.colormap_type=1;
-        targa_info.colormap_length=(unsigned short) image->colors;
-        targa_info.colormap_size=24;
+        tga_info.image_type=compression == RLECompression ? TGARLEColormap :
+          TGAColormap;
+        tga_info.colormap_type=1;
+        tga_info.colormap_length=(unsigned short) image->colors;
+        if (image_info->depth == 5)
+          tga_info.colormap_size=16;
+        else
+          tga_info.colormap_size=24;
       }
+  value=GetImageArtifact(image,"tga:image-origin");
+  if (value != (const char *) NULL)
+    {
+      OrientationType
+        origin;
+
+      origin=(OrientationType) ParseCommandOption(MagickOrientationOptions,
+        MagickFalse,value);
+      if (origin == BottomRightOrientation || origin == TopRightOrientation)
+        tga_info.attributes|=(1UL << 4);
+      if (origin == TopLeftOrientation || origin == TopRightOrientation)
+        tga_info.attributes|=(1UL << 5);
+    }
   /*
     Write TGA header.
   */
-  (void) WriteBlobByte(image,targa_info.id_length);
-  (void) WriteBlobByte(image,targa_info.colormap_type);
-  (void) WriteBlobByte(image,targa_info.image_type);
-  (void) WriteBlobLSBShort(image,targa_info.colormap_index);
-  (void) WriteBlobLSBShort(image,targa_info.colormap_length);
-  (void) WriteBlobByte(image,targa_info.colormap_size);
-  (void) WriteBlobLSBShort(image,targa_info.x_origin);
-  (void) WriteBlobLSBShort(image,targa_info.y_origin);
-  (void) WriteBlobLSBShort(image,targa_info.width);
-  (void) WriteBlobLSBShort(image,targa_info.height);
-  (void) WriteBlobByte(image,targa_info.bits_per_pixel);
-  (void) WriteBlobByte(image,targa_info.attributes);
-  if (targa_info.id_length != 0)
-    (void) WriteBlob(image,targa_info.id_length,(unsigned char *)
-      value);
-  if (targa_info.image_type == TargaColormap)
+  (void) WriteBlobByte(image,tga_info.id_length);
+  (void) WriteBlobByte(image,tga_info.colormap_type);
+  (void) WriteBlobByte(image,(unsigned char) tga_info.image_type);
+  (void) WriteBlobLSBShort(image,tga_info.colormap_index);
+  (void) WriteBlobLSBShort(image,tga_info.colormap_length);
+  (void) WriteBlobByte(image,tga_info.colormap_size);
+  (void) WriteBlobLSBShort(image,tga_info.x_origin);
+  (void) WriteBlobLSBShort(image,tga_info.y_origin);
+  (void) WriteBlobLSBShort(image,tga_info.width);
+  (void) WriteBlobLSBShort(image,tga_info.height);
+  (void) WriteBlobByte(image,tga_info.bits_per_pixel);
+  (void) WriteBlobByte(image,tga_info.attributes);
+  if (tga_info.id_length != 0)
+    (void) WriteBlob(image,tga_info.id_length,(unsigned char *) value);
+  if (tga_info.colormap_type != 0)
     {
       unsigned char
+        green,
         *targa_colormap;
 
       /*
         Dump colormap to file (blue, green, red byte order).
       */
       targa_colormap=(unsigned char *) AcquireQuantumMemory((size_t)
-        targa_info.colormap_length,3UL*sizeof(*targa_colormap));
+        tga_info.colormap_length,(tga_info.colormap_size/8)*
+        sizeof(*targa_colormap));
       if (targa_colormap == (unsigned char *) NULL)
         ThrowWriterException(ResourceLimitError,"MemoryAllocationFailed");
       q=targa_colormap;
       for (i=0; i < (ssize_t) image->colors; i++)
       {
-        *q++=ScaleQuantumToChar(image->colormap[i].blue);
-        *q++=ScaleQuantumToChar(image->colormap[i].green);
-        *q++=ScaleQuantumToChar(image->colormap[i].red);
+        if (image_info->depth == 5)
+          {
+            green=(unsigned char) ScaleQuantumToAny(ClampToQuantum(
+              image->colormap[i].green),range);
+            *q++=((unsigned char) ScaleQuantumToAny(ClampToQuantum(
+              image->colormap[i].blue),range)) | ((green & 0x07) << 5);
+            *q++=(((image->alpha_trait != UndefinedPixelTrait) && ((double)
+              ClampToQuantum(image->colormap[i].alpha) > midpoint)) ? 0x80 : 0) |
+              ((unsigned char) ScaleQuantumToAny(ClampToQuantum(
+              image->colormap[i].red),range) << 2) | ((green & 0x18) >> 3);
+          }
+        else
+          {
+            *q++=ScaleQuantumToChar(ClampToQuantum(image->colormap[i].blue));
+            *q++=ScaleQuantumToChar(ClampToQuantum(image->colormap[i].green));
+            *q++=ScaleQuantumToChar(ClampToQuantum(image->colormap[i].red));
+          }
       }
-      (void) WriteBlob(image,(size_t) (3*targa_info.colormap_length),
-        targa_colormap);
+      (void) WriteBlob(image,(size_t) ((tga_info.colormap_size/8)*
+        tga_info.colormap_length),targa_colormap);
       targa_colormap=(unsigned char *) RelinquishMagickMemory(targa_colormap);
     }
   /*
     Convert MIFF to TGA raster pixels.
   */
-  count=(ssize_t) (targa_info.bits_per_pixel*targa_info.width)/8;
-  targa_pixels=(unsigned char *) AcquireQuantumMemory((size_t) count,
-    sizeof(*targa_pixels));
-  if (targa_pixels == (unsigned char *) NULL)
-    ThrowWriterException(ResourceLimitError,"MemoryAllocationFailed");
+  channels=GetPixelChannels(image);
   for (y=(ssize_t) (image->rows-1); y >= 0; y--)
   {
-    p=GetVirtualPixels(image,0,y,image->columns,1,&image->exception);
-    if (p == (const PixelPacket *) NULL)
+    p=GetVirtualPixels(image,0,y,image->columns,1,exception);
+    if (p == (const Quantum *) NULL)
       break;
-    q=targa_pixels;
-    indexes=GetVirtualIndexQueue(image);
-    for (x=0; x < (ssize_t) image->columns; x++)
-    {
-      if (targa_info.image_type == TargaColormap)
-        *q++=(unsigned char) GetIndexPixelComponent(indexes+x);
-      else
-        if (targa_info.image_type == TargaMonochrome)
-          *q++=(unsigned char) ScaleQuantumToChar(PixelIntensityToQuantum(p));
-        else
+    if (compression == RLECompression)
+      {
+        x=0;
+        count=0;
+        while (x < (ssize_t) image->columns)
+        {
+          i=1;
+          while ((i < 128) && (count + i < 128) &&
+                 ((x + i) < (ssize_t) image->columns))
           {
-            *q++=ScaleQuantumToChar(GetBluePixelComponent(p));
-            *q++=ScaleQuantumToChar(GetGreenPixelComponent(p));
-            *q++=ScaleQuantumToChar(GetRedPixelComponent(p));
-            if (image->matte != MagickFalse)
-              *q++=(unsigned char) ScaleQuantumToChar(
-                GetAlphaPixelComponent(p));
-            if (image->colorspace == CMYKColorspace)
-              *q++=ScaleQuantumToChar(GetIndexPixelComponent(indexes+x));
+            if (tga_info.image_type == TGARLEColormap)
+              {
+                if (GetPixelIndex(image,p+(i*channels)) !=
+                    GetPixelIndex(image,p+((i-1)*channels)))
+                  break;
+              }
+            else if (tga_info.image_type == TGARLEMonochrome)
+              {
+                if (GetPixelLuma(image,p+(i*channels)) !=
+                    GetPixelLuma(image,p+((i-1)*channels)))
+                  break;
+              }
+            else
+              {
+                if ((GetPixelBlue(image,p+(i*channels)) !=
+                     GetPixelBlue(image,p+((i-1)*channels))) ||
+                    (GetPixelGreen(image,p+(i*channels)) !=
+                     GetPixelGreen(image,p+((i-1)*channels))) ||
+                    (GetPixelRed(image,p+(i*channels)) !=
+                     GetPixelRed(image,p+((i-1)*channels))))
+                  break;
+                if ((image->alpha_trait != UndefinedPixelTrait) &&
+                    (GetPixelAlpha(image,p+(i*channels)) !=
+                     GetPixelAlpha(image,p+(i-1)*channels)))
+                  break;
+              }
+            i++;
           }
-      p++;
-    }
-    (void) WriteBlob(image,(size_t) (q-targa_pixels),targa_pixels);
+          if (i < 3)
+            {
+              count+=i;
+              p+=(i*channels);
+            }
+          if ((i >= 3) || (count == 128) ||
+              ((x + i) == (ssize_t) image->columns))
+            {
+              if (count > 0)
+                {
+                  (void) WriteBlobByte(image,(unsigned char) (--count));
+                  while (count >= 0)
+                  {
+                    WriteTGAPixel(image,tga_info.image_type,p-((count+1)*
+                      channels),range,midpoint);
+                    count--;
+                  }
+                  count=0;
+                }
+            }
+          if (i >= 3)
+            {
+              (void) WriteBlobByte(image,(unsigned char) ((i-1) | 0x80));
+              WriteTGAPixel(image,tga_info.image_type,p,range,midpoint);
+              p+=(i*channels);
+            }
+          x+=i;
+        }
+      }
+    else
+      {
+        for (x=0; x < (ssize_t) image->columns; x++)
+          {
+            WriteTGAPixel(image,tga_info.image_type,p,range,midpoint);
+            p+=channels;
+          }
+      }
     if (image->previous == (Image *) NULL)
       {
         status=SetImageProgress(image,SaveImageTag,(MagickOffsetType) y,
@@ -810,7 +993,6 @@ static MagickBooleanType WriteTGAImage(const ImageInfo *image_info,Image *image)
           break;
       }
   }
-  targa_pixels=(unsigned char *) RelinquishMagickMemory(targa_pixels);
   (void) CloseBlob(image);
   return(MagickTrue);
 }

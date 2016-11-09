@@ -15,8 +15,10 @@
 %                              Software Design                                %
 %                              Bill Radcliffe                                 %
 %                                   2001                                      %
+%                               Dirk Lemstra                                  %
+%                               January 2014                                  %
 %                                                                             %
-%  Copyright 1999-2011 ImageMagick Studio LLC, a non-profit organization      %
+%  Copyright 1999-2016 ImageMagick Studio LLC, a non-profit organization      %
 %  dedicated to making software imaging solutions freely available.           %
 %                                                                             %
 %  You may not use this file except in compliance with the License.  You may  %
@@ -37,31 +39,40 @@
  * Include declarations.
  */
 
-#include "magick/studio.h"
+#include "MagickCore/studio.h"
 #if defined(MAGICKCORE_WINGDI32_DELEGATE)
-#  if defined(__CYGWIN__)
-#    include <windows.h>
+#  if !defined(_MSC_VER)
+#    if defined(__CYGWIN__)
+#      include <windows.h>
+#    else
+#      include <wingdi.h>
+#    endif
 #  else
-#    include <wingdi.h>
+#pragma warning(disable: 4457)
+#pragma warning(disable: 4458)
+#    include <gdiplus.h>
+#pragma warning(default: 4457)
+#pragma warning(default: 4458)
+#    pragma comment(lib, "gdiplus.lib")
 #  endif
 #endif
-
-#include "magick/blob.h"
-#include "magick/blob-private.h"
-#include "magick/cache.h"
-#include "magick/exception.h"
-#include "magick/exception-private.h"
-#include "magick/geometry.h"
-#include "magick/image.h"
-#include "magick/image-private.h"
-#include "magick/list.h"
-#include "magick/magick.h"
-#include "magick/memory_.h"
-#include "magick/pixel.h"
-#include "magick/quantum-private.h"
-#include "magick/static.h"
-#include "magick/string_.h"
-#include "magick/module.h"
+#include "MagickCore/blob.h"
+#include "MagickCore/blob-private.h"
+#include "MagickCore/cache.h"
+#include "MagickCore/exception.h"
+#include "MagickCore/exception-private.h"
+#include "MagickCore/geometry.h"
+#include "MagickCore/image.h"
+#include "MagickCore/image-private.h"
+#include "MagickCore/list.h"
+#include "MagickCore/magick.h"
+#include "MagickCore/memory_.h"
+#include "MagickCore/pixel.h"
+#include "MagickCore/pixel-accessor.h"
+#include "MagickCore/quantum-private.h"
+#include "MagickCore/static.h"
+#include "MagickCore/string_.h"
+#include "MagickCore/module.h"
 
 /*
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -162,7 +173,9 @@ static MagickBooleanType IsWMF(const unsigned char *magick,const size_t length)
 %
 */
 
-#if defined(MAGICKCORE_HAVE__WFOPEN)
+#if defined(MAGICKCORE_WINGDI32_DELEGATE)
+#  if !defined(_MSC_VER)
+#    if defined(MAGICKCORE_HAVE__WFOPEN)
 static size_t UTF8ToUTF16(const unsigned char *utf8,wchar_t *utf16)
 {
   register const unsigned char
@@ -277,14 +290,8 @@ static wchar_t *ConvertUTF8ToUTF16(const unsigned char *source)
   length=UTF8ToUTF16(source,utf16);
   return(utf16);
 }
-#endif
+#    endif /* MAGICKCORE_HAVE__WFOPEN */
 
-/*
-  This method reads either an enhanced metafile, a regular 16bit Windows
-  metafile, or an Aldus Placeable metafile and converts it into an enhanced
-  metafile.  Width and height are returned in .01mm units.
-*/
-#if defined(MAGICKCORE_WINGDI32_DELEGATE)
 static HENHMETAFILE ReadEnhMetaFile(const char *path,ssize_t *width,
   ssize_t *height)
 {
@@ -428,8 +435,7 @@ static HENHMETAFILE ReadEnhMetaFile(const char *path,ssize_t *width,
 
 #define CENTIMETERS_INCH 2.54
 
-static Image *ReadEMFImage(const ImageInfo *image_info,
-  ExceptionInfo *exception)
+static Image *ReadEMFImage(const ImageInfo *image_info,ExceptionInfo *exception)
 {
   BITMAPINFO
     DIBinfo;
@@ -447,13 +453,16 @@ static Image *ReadEMFImage(const ImageInfo *image_info,
   Image
     *image;
 
+  MagickBooleanType
+    status;
+
   RECT
     rect;
 
   register ssize_t
     x;
 
-  register PixelPacket
+  register Quantum
     *q;
 
   RGBQUAD
@@ -465,7 +474,7 @@ static Image *ReadEMFImage(const ImageInfo *image_info,
     width,
     y;
 
-  image=AcquireImage(image_info);
+  image=AcquireImage(image_info,exception);
   hemf=ReadEnhMetaFile(image_info->filename,&width,&height);
   if (hemf == (HENHMETAFILE) NULL)
     ThrowReaderException(CorruptImageError,"ImproperImageHeader");
@@ -477,15 +486,15 @@ static Image *ReadEMFImage(const ImageInfo *image_info,
 
       y_resolution=DefaultResolution;
       x_resolution=DefaultResolution;
-      if (image->y_resolution > 0)
+      if (image->resolution.y > 0)
         {
-          y_resolution=image->y_resolution;
+          y_resolution=image->resolution.y;
           if (image->units == PixelsPerCentimeterResolution)
             y_resolution*=CENTIMETERS_INCH;
         }
-      if (image->x_resolution > 0)
+      if (image->resolution.x > 0)
         {
-          x_resolution=image->x_resolution;
+          x_resolution=image->resolution.x;
           if (image->units == PixelsPerCentimeterResolution)
             x_resolution*=CENTIMETERS_INCH;
         }
@@ -495,15 +504,14 @@ static Image *ReadEMFImage(const ImageInfo *image_info,
     }
   if (image_info->size != (char *) NULL)
     {
-      ssize_t
-        x;
-
       image->columns=width;
       image->rows=height;
-      x=0;
-      y=0;
-      (void) GetGeometry(image_info->size,&x,&y,&image->columns,&image->rows);
+      (void) GetGeometry(image_info->size,(ssize_t *) NULL,(ssize_t *) NULL,
+        &image->columns,&image->rows);
     }
+  status=SetImageExtent(image,image->columns,image->rows,exception);
+  if (status == MagickFalse)
+    return(DestroyImageList(image));
   if (image_info->page != (char *) NULL)
     {
       char
@@ -524,24 +532,25 @@ static Image *ReadEMFImage(const ImageInfo *image_info,
         {
           flags=ParseMetaGeometry(geometry,&sans,&sans,&image->columns,
             &image->rows);
-          if (image->x_resolution != 0.0)
-            image->columns=(size_t) floor((image->columns*image->x_resolution)+
+          if (image->resolution.x != 0.0)
+            image->columns=(size_t) floor((image->columns*image->resolution.x)+
               0.5);
-          if (image->y_resolution != 0.0)
-            image->rows=(size_t) floor((image->rows*image->y_resolution)+0.5);
+          if (image->resolution.y != 0.0)
+            image->rows=(size_t) floor((image->rows*image->resolution.y)+0.5);
         }
       else
         {
           *p='\0';
           flags=ParseMetaGeometry(geometry,&sans,&sans,&image->columns,
             &image->rows);
-          if (image->x_resolution != 0.0)
-            image->columns=(size_t) floor(((image->columns*image->x_resolution)/
+          if (image->resolution.x != 0.0)
+            image->columns=(size_t) floor(((image->columns*image->resolution.x)/
               DefaultResolution)+0.5);
-          if (image->y_resolution != 0.0)
-            image->rows=(size_t) floor(((image->rows*image->y_resolution)/
+          if (image->resolution.y != 0.0)
+            image->rows=(size_t) floor(((image->rows*image->resolution.y)/
               DefaultResolution)+0.5);
         }
+      (void) flags;
       geometry=DestroyString(geometry);
     }
   hDC=GetDC(NULL);
@@ -609,16 +618,16 @@ static Image *ReadEMFImage(const ImageInfo *image_info,
   for (y=0; y < (ssize_t) image->rows; y++)
   {
     q=QueueAuthenticPixels(image,0,y,image->columns,1,exception);
-    if (q == (PixelPacket *) NULL)
+    if (q == (Quantum *) NULL)
       break;
     for (x=0; x < (ssize_t) image->columns; x++)
     {
-      SetRedPixelComponent(q,ScaleCharToQuantum(pBits->rgbRed));
-      SetGreenPixelComponent(q,ScaleCharToQuantum(pBits->rgbGreen));
-      SetBluePixelComponent(q,ScaleCharToQuantum(pBits->rgbBlue));
-      SetOpacityPixelComponent(q,OpaqueOpacity);
+      SetPixelRed(image,ScaleCharToQuantum(pBits->rgbRed),q);
+      SetPixelGreen(image,ScaleCharToQuantum(pBits->rgbGreen),q);
+      SetPixelBlue(image,ScaleCharToQuantum(pBits->rgbBlue),q);
+      SetPixelAlpha(image,OpaqueAlpha,q);
       pBits++;
-      q++;
+      q+=GetPixelChannels(image);
     }
     if (SyncAuthenticPixels(image,exception) == MagickFalse)
       break;
@@ -629,7 +638,184 @@ static Image *ReadEMFImage(const ImageInfo *image_info,
   DeleteObject(hBitmap);
   return(GetFirstImageInList(image));
 }
-#endif /* MAGICKCORE_WINGDI32_DELEGATE */
+#  else
+
+static inline void EMFSetDimensions(Image * image,Gdiplus::Image *source)
+{
+  if ((image->resolution.x <= 0.0) || (image->resolution.y <= 0.0))
+    return;
+
+  image->columns=(size_t) floor((Gdiplus::REAL) source->GetWidth()/
+    source->GetHorizontalResolution()*image->resolution.x+0.5);
+  image->rows=(size_t)floor((Gdiplus::REAL) source->GetHeight()/
+    source->GetVerticalResolution()*image->resolution.y+0.5);
+}
+
+static Image *ReadEMFImage(const ImageInfo *image_info,
+  ExceptionInfo *exception)
+{
+  Gdiplus::Bitmap
+    *bitmap;
+
+  Gdiplus::BitmapData
+     bitmap_data;
+
+  Gdiplus::GdiplusStartupInput
+    startup_input;
+
+  Gdiplus::Graphics
+    *graphics;
+
+  Gdiplus::Image
+    *source;
+
+  Gdiplus::Rect
+    rect;
+
+  GeometryInfo
+    geometry_info;
+
+  Image
+    *image;
+
+  MagickStatusType
+    flags;
+
+  register Quantum
+    *q;
+
+  register ssize_t
+    x;
+
+  ssize_t
+    y;
+
+  ULONG_PTR
+    token;
+
+  unsigned char
+    *p;
+
+  wchar_t
+    fileName[MagickPathExtent];
+
+  assert(image_info != (const ImageInfo *) NULL);
+  assert(image_info->signature == MagickCoreSignature);
+  if (image_info->debug != MagickFalse)
+    (void) LogMagickEvent(TraceEvent,GetMagickModule(),"%s",
+      image_info->filename);
+  assert(exception != (ExceptionInfo *) NULL);
+
+  image=AcquireImage(image_info,exception);
+  if (Gdiplus::GdiplusStartup(&token,&startup_input,NULL) != 
+    Gdiplus::Status::Ok)
+    ThrowReaderException(CoderError, "GdiplusStartupFailed");
+  MultiByteToWideChar(CP_UTF8,0,image->filename,-1,fileName,MagickPathExtent);
+  source=Gdiplus::Image::FromFile(fileName);
+  if (source == (Gdiplus::Image *) NULL)
+    {
+      Gdiplus::GdiplusShutdown(token);
+      ThrowReaderException(FileOpenError,"UnableToOpenFile");
+    }
+
+  image->resolution.x=source->GetHorizontalResolution();
+  image->resolution.y=source->GetVerticalResolution();
+  image->columns=(size_t) source->GetWidth();
+  image->rows=(size_t) source->GetHeight();
+  if (image_info->size != (char *) NULL)
+    {
+      (void) GetGeometry(image_info->size,(ssize_t *) NULL,(ssize_t *) NULL,
+        &image->columns,&image->rows);
+      image->resolution.x=source->GetHorizontalResolution()*image->columns/
+        source->GetWidth();
+      image->resolution.y=source->GetVerticalResolution()*image->rows/
+        source->GetHeight();
+      if (image->resolution.x == 0)
+        image->resolution.x=image->resolution.y;
+      else if (image->resolution.y == 0)
+        image->resolution.y=image->resolution.x;
+      else
+        image->resolution.x=image->resolution.y=MagickMin(
+          image->resolution.x,image->resolution.y);
+      EMFSetDimensions(image,source);
+    }
+  else if (image_info->density != (char *) NULL)
+    {
+      flags=ParseGeometry(image_info->density,&geometry_info);
+      image->resolution.x=geometry_info.rho;
+      image->resolution.y=geometry_info.sigma;
+      if ((flags & SigmaValue) == 0)
+        image->resolution.y=image->resolution.x;
+      EMFSetDimensions(image,source);
+    }
+  if (SetImageExtent(image,image->columns,image->rows,exception) == MagickFalse)
+    {
+      delete source;
+      Gdiplus::GdiplusShutdown(token);
+      return(DestroyImageList(image));
+    }
+  image->alpha_trait=BlendPixelTrait;
+  if (image->ping != MagickFalse)
+    {
+      delete source;
+      Gdiplus::GdiplusShutdown(token);
+      return(image);
+    }
+
+  bitmap=new Gdiplus::Bitmap((INT) image->columns,(INT) image->rows,
+    PixelFormat32bppARGB);
+  graphics=Gdiplus::Graphics::FromImage(bitmap);
+  graphics->SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
+  graphics->SetSmoothingMode(Gdiplus::SmoothingModeHighQuality);
+  graphics->SetTextRenderingHint(Gdiplus::TextRenderingHintClearTypeGridFit);
+  graphics->Clear(Gdiplus::Color((BYTE) ScaleQuantumToChar(
+    image->background_color.alpha),(BYTE) ScaleQuantumToChar(
+    image->background_color.red),(BYTE) ScaleQuantumToChar(
+    image->background_color.green),(BYTE) ScaleQuantumToChar(
+    image->background_color.blue)));
+  graphics->DrawImage(source,0,0,(INT) image->columns,(INT) image->rows);
+  delete graphics;
+  delete source;
+
+  rect=Gdiplus::Rect(0,0,(INT) image->columns,(INT) image->rows);
+  if (bitmap->LockBits(&rect,Gdiplus::ImageLockModeRead,PixelFormat32bppARGB,
+    &bitmap_data) != Gdiplus::Ok)
+  {
+    delete bitmap;
+    Gdiplus::GdiplusShutdown(token);
+    ThrowReaderException(FileOpenError,"UnableToReadImageData");
+  }
+
+  for (y=0; y < (ssize_t) image->rows; y++)
+  {
+    p=(unsigned char *) bitmap_data.Scan0+(y*abs(bitmap_data.Stride));
+    if (bitmap_data.Stride < 0)
+      q=GetAuthenticPixels(image,0,image->rows-y-1,image->columns,1,exception);
+    else
+      q=GetAuthenticPixels(image,0,y,image->columns,1,exception);
+    if (q == (Quantum *) NULL)
+      break;
+
+    for (x=0; x < (ssize_t) image->columns; x++)
+    {
+      SetPixelBlue(image,ScaleCharToQuantum(*p++),q);
+      SetPixelGreen(image,ScaleCharToQuantum(*p++),q);
+      SetPixelRed(image,ScaleCharToQuantum(*p++),q);
+      SetPixelAlpha(image,ScaleCharToQuantum(*p++),q);
+      q+=GetPixelChannels(image);
+    }
+
+    if (SyncAuthenticPixels(image,exception) == MagickFalse)
+      break;
+  }
+
+  bitmap->UnlockBits(&bitmap_data);
+  delete bitmap;
+  Gdiplus::GdiplusShutdown(token);
+  return(image);
+}
+#  endif /* _MSC_VER */
+#endif /* MAGICKCORE_EMF_DELEGATE */
 
 /*
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -659,24 +845,19 @@ ModuleExport size_t RegisterEMFImage(void)
   MagickInfo
     *entry;
 
-  entry=SetMagickInfo("EMF");
+  entry=AcquireMagickInfo("EMF","EMF","Windows Enhanced Meta File");
 #if defined(MAGICKCORE_WINGDI32_DELEGATE)
   entry->decoder=ReadEMFImage;
 #endif
-  entry->description=ConstantString(
-    "Windows WIN32 API rendered Enhanced Meta File");
   entry->magick=(IsImageFormatHandler *) IsEMF;
-  entry->blob_support=MagickFalse;
-  entry->module=ConstantString("WMF");
+  entry->flags^=CoderBlobSupportFlag;
   (void) RegisterMagickInfo(entry);
-  entry=SetMagickInfo("WMFWIN32");
+  entry=AcquireMagickInfo("EMF","WMF","Windows Meta File");
 #if defined(MAGICKCORE_WINGDI32_DELEGATE)
   entry->decoder=ReadEMFImage;
 #endif
-  entry->description=ConstantString("Windows WIN32 API rendered Meta File");
   entry->magick=(IsImageFormatHandler *) IsWMF;
-  entry->blob_support=MagickFalse;
-  entry->module=ConstantString("WMFWIN32");
+  entry->flags^=CoderBlobSupportFlag;
   (void) RegisterMagickInfo(entry);
   return(MagickImageCoderSignature);
 }
@@ -703,5 +884,5 @@ ModuleExport size_t RegisterEMFImage(void)
 ModuleExport void UnregisterEMFImage(void)
 {
   (void) UnregisterMagickInfo("EMF");
-  (void) UnregisterMagickInfo("WMFWIN32");
+  (void) UnregisterMagickInfo("WMF");
 }

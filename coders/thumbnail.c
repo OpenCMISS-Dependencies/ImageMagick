@@ -13,11 +13,11 @@
 %                        Write EXIF Thumbnail To File.                        %
 %                                                                             %
 %                              Software Design                                %
-%                                John Cristy                                  %
+%                                   Cristy                                    %
 %                                 July 1992                                   %
 %                                                                             %
 %                                                                             %
-%  Copyright 1999-2011 ImageMagick Studio LLC, a non-profit organization      %
+%  Copyright 1999-2016 ImageMagick Studio LLC, a non-profit organization      %
 %  dedicated to making software imaging solutions freely available.           %
 %                                                                             %
 %  You may not use this file except in compliance with the License.  You may  %
@@ -39,29 +39,30 @@
 /*
   Include declarations.
 */
-#include "magick/studio.h"
-#include "magick/blob.h"
-#include "magick/blob-private.h"
-#include "magick/constitute.h"
-#include "magick/exception.h"
-#include "magick/exception-private.h"
-#include "magick/magick.h"
-#include "magick/memory_.h"
-#include "magick/module.h"
-#include "magick/monitor.h"
-#include "magick/monitor-private.h"
-#include "magick/profile.h"
-#include "magick/property.h"
-#include "magick/quantum-private.h"
-#include "magick/static.h"
-#include "magick/string_.h"
-#include "magick/string-private.h"
+#include "MagickCore/studio.h"
+#include "MagickCore/attribute.h"
+#include "MagickCore/blob.h"
+#include "MagickCore/blob-private.h"
+#include "MagickCore/constitute.h"
+#include "MagickCore/exception.h"
+#include "MagickCore/exception-private.h"
+#include "MagickCore/magick.h"
+#include "MagickCore/memory_.h"
+#include "MagickCore/module.h"
+#include "MagickCore/monitor.h"
+#include "MagickCore/monitor-private.h"
+#include "MagickCore/profile.h"
+#include "MagickCore/property.h"
+#include "MagickCore/quantum-private.h"
+#include "MagickCore/static.h"
+#include "MagickCore/string_.h"
+#include "MagickCore/string-private.h"
 
 /*
   Forward declarations.
 */
 static MagickBooleanType
-  WriteTHUMBNAILImage(const ImageInfo *,Image *);
+  WriteTHUMBNAILImage(const ImageInfo *,Image *,ExceptionInfo *);
 
 /*
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -91,10 +92,8 @@ ModuleExport size_t RegisterTHUMBNAILImage(void)
   MagickInfo
     *entry;
 
-  entry=SetMagickInfo("THUMBNAIL");
+  entry=AcquireMagickInfo("THUMBNAIL","THUMBNAIL","EXIF Profile Thumbnail");
   entry->encoder=(EncodeImageHandler *) WriteTHUMBNAILImage;
-  entry->description=ConstantString("EXIF Profile Thumbnail");
-  entry->module=ConstantString("THUMBNAIL");
   (void) RegisterMagickInfo(entry);
   return(MagickImageCoderSignature);
 }
@@ -139,7 +138,7 @@ ModuleExport void UnregisterTHUMBNAILImage(void)
 %  The format of the WriteTHUMBNAILImage method is:
 %
 %      MagickBooleanType WriteTHUMBNAILImage(const ImageInfo *image_info,
-%        Image *image)
+%        Image *image,ExceptionInfo *exception)
 %
 %  A description of each parameter follows.
 %
@@ -147,9 +146,11 @@ ModuleExport void UnregisterTHUMBNAILImage(void)
 %
 %    o image:  The image.
 %
+%    o exception: return any errors or warnings in this structure.
+%
 */
 static MagickBooleanType WriteTHUMBNAILImage(const ImageInfo *image_info,
-  Image *image)
+  Image *image,ExceptionInfo *exception)
 {
   const char
     *property;
@@ -176,16 +177,16 @@ static MagickBooleanType WriteTHUMBNAILImage(const ImageInfo *image_info,
     offset;
 
   unsigned char
-    magick[MaxTextExtent];
+    magick[MagickPathExtent];
 
   profile=GetImageProfile(image,"exif");
   if (profile == (const StringInfo *) NULL)
     ThrowWriterException(CoderError,"ImageDoesNotHaveAThumbnail");
-  property=GetImageProperty(image,"exif:JPEGInterchangeFormat");
+  property=GetImageProperty(image,"exif:JPEGInterchangeFormat",exception);
   if (property == (const char *) NULL)
     ThrowWriterException(CoderError,"ImageDoesNotHaveAThumbnail");
   offset=(ssize_t) StringToLong(property);
-  property=GetImageProperty(image,"exif:JPEGInterchangeFormatLength");
+  property=GetImageProperty(image,"exif:JPEGInterchangeFormatLength",exception);
   if (property == (const char *) NULL)
     ThrowWriterException(CoderError,"ImageDoesNotHaveAThumbnail");
   length=(size_t) StringToLong(property);
@@ -199,19 +200,21 @@ static MagickBooleanType WriteTHUMBNAILImage(const ImageInfo *image_info,
       break;
   }
   thumbnail_image=BlobToImage(image_info,GetStringInfoDatum(profile)+offset+i-2,
-    length,&image->exception);
+    length,exception);
   if (thumbnail_image == (Image *) NULL)
     return(MagickFalse);
-  (void) SetImageType(thumbnail_image,thumbnail_image->matte == MagickFalse ?
-    TrueColorType : TrueColorMatteType);
+  (void) SetImageType(thumbnail_image,thumbnail_image->alpha_trait ==
+    UndefinedPixelTrait ? TrueColorType : TrueColorAlphaType,exception);
   (void) CopyMagickString(thumbnail_image->filename,image->filename,
-    MaxTextExtent);
+    MagickPathExtent);
   write_info=CloneImageInfo(image_info);
-  (void) SetImageInfo(write_info,1,&image->exception);
-  if (LocaleCompare(write_info->magick,"THUMBNAIL") == 0)
-    (void) FormatLocaleString(thumbnail_image->filename,MaxTextExtent,
+  *write_info->magick='\0';
+  (void) SetImageInfo(write_info,1,exception);
+  if ((*write_info->magick == '\0') ||
+      (LocaleCompare(write_info->magick,"THUMBNAIL") == 0))
+    (void) FormatLocaleString(thumbnail_image->filename,MagickPathExtent,
       "miff:%s",write_info->filename);
-  status=WriteImage(write_info,thumbnail_image);
+  status=WriteImage(write_info,thumbnail_image,exception);
   thumbnail_image=DestroyImage(thumbnail_image);
   write_info=DestroyImageInfo(write_info);
   return(status);

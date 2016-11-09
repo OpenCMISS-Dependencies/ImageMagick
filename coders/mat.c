@@ -47,30 +47,35 @@
 /*
   Include declarations.
 */
-#include "magick/studio.h"
-#include "magick/blob.h"
-#include "magick/blob-private.h"
-#include "magick/cache.h"
-#include "magick/color-private.h"
-#include "magick/colormap.h"
-#include "magick/exception.h"
-#include "magick/exception-private.h"
-#include "magick/image.h"
-#include "magick/image-private.h"
-#include "magick/list.h"
-#include "magick/magick.h"
-#include "magick/memory_.h"
-#include "magick/monitor.h"
-#include "magick/monitor-private.h"
-#include "magick/quantum-private.h"
-#include "magick/option.h"
-#include "magick/pixel.h"
-#include "magick/resource_.h"
-#include "magick/shear.h"
-#include "magick/static.h"
-#include "magick/string_.h"
-#include "magick/module.h"
-#include "magick/transform.h"
+#include "MagickCore/studio.h"
+#include "MagickCore/attribute.h"
+#include "MagickCore/blob.h"
+#include "MagickCore/blob-private.h"
+#include "MagickCore/cache.h"
+#include "MagickCore/color-private.h"
+#include "MagickCore/colormap.h"
+#include "MagickCore/colorspace-private.h"
+#include "MagickCore/distort.h"
+#include "MagickCore/exception.h"
+#include "MagickCore/exception-private.h"
+#include "MagickCore/image.h"
+#include "MagickCore/image-private.h"
+#include "MagickCore/list.h"
+#include "MagickCore/magick.h"
+#include "MagickCore/memory_.h"
+#include "MagickCore/monitor.h"
+#include "MagickCore/monitor-private.h"
+#include "MagickCore/pixel-accessor.h"
+#include "MagickCore/quantum.h"
+#include "MagickCore/quantum-private.h"
+#include "MagickCore/option.h"
+#include "MagickCore/pixel.h"
+#include "MagickCore/resource_.h"
+#include "MagickCore/static.h"
+#include "MagickCore/string_.h"
+#include "MagickCore/module.h"
+#include "MagickCore/transform.h"
+#include "MagickCore/utility-private.h"
 #if defined(MAGICKCORE_ZLIB_DELEGATE)
  #include "zlib.h"
 #endif
@@ -79,7 +84,7 @@
   Forward declaration.
 */
 static MagickBooleanType
-  WriteMATImage(const ImageInfo *,Image *);
+  WriteMATImage(const ImageInfo *,Image *,ExceptionInfo *);
 
 
 /* Auto coloring method, sorry this creates some artefact inside data
@@ -115,7 +120,7 @@ MATHeader;
 static const char *MonthsTab[12]={"Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"};
 static const char *DayOfWTab[7]={"Sun","Mon","Tue","Wed","Thu","Fri","Sat"};
 static const char *OsDesc=
-#ifdef __WIN32__
+#if defined(MAGICKCORE_WINDOWS_SUPPORT)
     "PCWIN";
 #else
  #ifdef __APPLE__
@@ -174,65 +179,62 @@ typedef enum
 static const QuantumType z2qtype[4] = {GrayQuantum, BlueQuantum, GreenQuantum, RedQuantum};
 
 
-static void InsertComplexDoubleRow(double *p, int y, Image * image, double MinVal,
-                                  double MaxVal)
+static void InsertComplexDoubleRow(Image *image,double *p,int y,double MinVal,
+  double MaxVal,ExceptionInfo *exception)
 {
-  ExceptionInfo
-    *exception;
 
   double f;
   int x;
-  register PixelPacket *q;
+  register Quantum *q;
 
   if (MinVal == 0)
     MinVal = -1;
   if (MaxVal == 0)
     MaxVal = 1;
 
-  exception=(&image->exception);
   q=QueueAuthenticPixels(image,0,y,image->columns,1,exception);
-  if (q == (PixelPacket *) NULL)
+  if (q == (Quantum *) NULL)
     return;
   for (x = 0; x < (ssize_t) image->columns; x++)
   {
     if (*p > 0)
     {
-      f = (*p / MaxVal) * (QuantumRange - GetRedPixelComponent(q));
-      if (f + GetRedPixelComponent(q) > QuantumRange)
-        SetRedPixelComponent(q,QuantumRange);
+      f = (*p / MaxVal) * (QuantumRange-GetPixelRed(image,q));
+      if (f + GetPixelRed(image,q) > QuantumRange)
+        SetPixelRed(image,QuantumRange,q);
       else
-        SetRedPixelComponent(q,GetRedPixelComponent(q)+(int) f);
-      if ((int) f / 2.0 > GetGreenPixelComponent(q))
+        SetPixelRed(image,GetPixelRed(image,q)+(int) f,q);
+      if ((int) f / 2.0 > GetPixelGreen(image,q))
         {
-          SetGreenPixelComponent(q,0);
-          SetBluePixelComponent(q,0);
+          SetPixelGreen(image,0,q);
+          SetPixelBlue(image,0,q);
         }
       else
         {
-          SetBluePixelComponent(q,GetBluePixelComponent(q)-(int) (f/2.0));
-          SetGreenPixelComponent(q,GetBluePixelComponent(q));
+          SetPixelBlue(image,GetPixelBlue(image,q)-(int) (f/2.0),q);
+          SetPixelGreen(image,GetPixelBlue(image,q),q);
         }
     }
     if (*p < 0)
     {
-      f = (*p / MaxVal) * (QuantumRange - GetBluePixelComponent(q));
-      if (f + GetBluePixelComponent(q) > QuantumRange)
-        SetBluePixelComponent(q,QuantumRange);
+      f = (*p / MaxVal) * (QuantumRange-GetPixelBlue(image,q));
+      if (f+GetPixelBlue(image,q) > QuantumRange)
+        SetPixelBlue(image,QuantumRange,q);
       else
-        SetBluePixelComponent(q,GetBluePixelComponent(q)+(int) f);
-      if ((int) f / 2.0 > q->green)
+        SetPixelBlue(image,GetPixelBlue(image,q)+(int) f,q);
+      if ((int) f / 2.0 > GetPixelGreen(image,q))
         {
-          SetRedPixelComponent(q,0);
-          SetGreenPixelComponent(q,0);
+          SetPixelRed(image,0,q);
+          SetPixelGreen(image,0,q);
         }
       else
         {
-          SetRedPixelComponent(q,GetRedPixelComponent(q)-(int) (f/2.0));
-          SetGreenPixelComponent(q,GetRedPixelComponent(q));
+          SetPixelRed(image,GetPixelRed(image,q)-(int) (f/2.0),q);
+          SetPixelGreen(image,GetPixelRed(image,q),q);
         }
     }
     p++;
-    q++;
+    q+=GetPixelChannels(image);
   }
   if (!SyncAuthenticPixels(image,exception))
     return;
@@ -240,61 +242,58 @@ static void InsertComplexDoubleRow(double *p, int y, Image * image, double MinVa
 }
 
 
-static void InsertComplexFloatRow(float *p, int y, Image * image, double MinVal,
-                                  double MaxVal)
+static void InsertComplexFloatRow(Image *image,float *p,int y,double MinVal,
+  double MaxVal,ExceptionInfo *exception)
 {
-  ExceptionInfo
-    *exception;
-
   double f;
   int x;
-  register PixelPacket *q;
+  register Quantum *q;
 
   if (MinVal == 0)
     MinVal = -1;
   if (MaxVal == 0)
     MaxVal = 1;
 
-  exception=(&image->exception);
   q = QueueAuthenticPixels(image, 0, y, image->columns, 1,exception);
-  if (q == (PixelPacket *) NULL)
+  if (q == (Quantum *) NULL)
     return;
   for (x = 0; x < (ssize_t) image->columns; x++)
   {
     if (*p > 0)
     {
-      f = (*p / MaxVal) * (QuantumRange - GetRedPixelComponent(q));
-      if (f + GetRedPixelComponent(q) > QuantumRange)
-        SetRedPixelComponent(q,QuantumRange);
+      f = (*p / MaxVal) * (QuantumRange-GetPixelRed(image,q));
+      if (f+GetPixelRed(image,q) > QuantumRange)
+        SetPixelRed(image,QuantumRange,q);
       else
-        SetRedPixelComponent(q,GetRedPixelComponent(q)+(int) f);
-      if ((int) f / 2.0 > GetGreenPixelComponent(q))
+        SetPixelRed(image,GetPixelRed(image,q)+(int) f,q);
+      if ((int) f / 2.0 > GetPixelGreen(image,q))
         {
-          SetGreenPixelComponent(q,0);
-          SetBluePixelComponent(q,0);
+          SetPixelGreen(image,0,q);
+          SetPixelBlue(image,0,q);
         }
       else
         {
-          SetBluePixelComponent(q,GetBluePixelComponent(q)-(int) (f/2.0));
-          SetGreenPixelComponent(q,GetBluePixelComponent(q));
+          SetPixelBlue(image,GetPixelBlue(image,q)-(int) (f/2.0),q);
+          SetPixelGreen(image,GetPixelBlue(image,q),q);
         }
     }
     if (*p < 0)
     {
-      f = (*p / MaxVal) * (QuantumRange - GetBluePixelComponent(q));
-      if (f + GetBluePixelComponent(q) > QuantumRange)
-        SetBluePixelComponent(q,QuantumRange);
+      f = (*p / MaxVal) * (QuantumRange - GetPixelBlue(image,q));
+      if (f + GetPixelBlue(image,q) > QuantumRange)
+        SetPixelBlue(image,QuantumRange,q);
       else
-        SetBluePixelComponent(q,GetBluePixelComponent(q)+(int) f);
-      if ((int) f / 2.0 > q->green)
+        SetPixelBlue(image,GetPixelBlue(image,q)+
+          (int) f,q);
+      if ((int) f / 2.0 > GetPixelGreen(image,q))
         {
-          SetGreenPixelComponent(q,0);
-          SetRedPixelComponent(q,0);
+          SetPixelGreen(image,0,q);
+          SetPixelRed(image,0,q);
         }
       else
         {
-          SetRedPixelComponent(q,GetRedPixelComponent(q)-(int) (f/2.0));
-          SetGreenPixelComponent(q,GetRedPixelComponent(q));
+          SetPixelRed(image,GetPixelRed(image,q)-(int) (f/2.0),q);
+          SetPixelGreen(image,GetPixelRed(image,q),q);
         }
     }
     p++;
@@ -365,14 +364,14 @@ double *dblrow;
 float *fltrow;
 
   if (endian_indicator == LSBEndian)
-  {    
+  {
     ReadBlobDoublesXXX = ReadBlobDoublesLSB;
-    ReadBlobFloatsXXX = ReadBlobFloatsLSB;   
-  } 
+    ReadBlobFloatsXXX = ReadBlobFloatsLSB;
+  }
   else    /* MI */
-  {    
+  {
     ReadBlobDoublesXXX = ReadBlobDoublesMSB;
-    ReadBlobFloatsXXX = ReadBlobFloatsMSB;   
+    ReadBlobFloatsXXX = ReadBlobFloatsMSB;
   }
 
   filepos = TellBlob(image);     /* Please note that file seeking occurs only in the case of doubles */
@@ -417,16 +416,16 @@ float *fltrow;
 }
 
 
-static void FixSignedValues(PixelPacket *q, int y)
+static void FixSignedValues(const Image *image,Quantum *q, int y)
 {
   while(y-->0)
   {
      /* Please note that negative values will overflow
-        Q=8; QuantumRange=255: <0;127> + 127+1 = <128; 255> 
+        Q=8; QuantumRange=255: <0;127> + 127+1 = <128; 255>
            <-1;-128> + 127+1 = <0; 127> */
-    SetRedPixelComponent(q,GetRedPixelComponent(q)+QuantumRange/2+1);
-    SetGreenPixelComponent(q,GetGreenPixelComponent(q)+QuantumRange/2+1);
-    SetBluePixelComponent(q,GetBluePixelComponent(q)+QuantumRange/2+1);
+    SetPixelRed(image,GetPixelRed(image,q)+QuantumRange/2+1,q);
+    SetPixelGreen(image,GetPixelGreen(image,q)+QuantumRange/2+1,q);
+    SetPixelBlue(image,GetPixelBlue(image,q)+QuantumRange/2+1,q);
     q++;
   }
 }
@@ -442,7 +441,7 @@ unsigned char val = 0;
   while(ldblk-->0)
   {
     if(*Buff++ != 0)
-      val |= mask;    
+      val |= mask;
 
     mask >>= 1;
     if(mask==0)
@@ -450,8 +449,8 @@ unsigned char val = 0;
       *BuffL++ = val;
       val = 0;
       mask = 128;
-    }   
-      
+    }
+
   }
   *BuffL = val;
 }
@@ -482,85 +481,290 @@ z_stream zip_info;
 FILE *mat_file;
 size_t magick_size;
 size_t extent;
+int file;
 
 int status;
+int zip_status;
 
   if(clone_info==NULL) return NULL;
   if(clone_info->file)    /* Close file opened from previous transaction. */
   {
     fclose(clone_info->file);
     clone_info->file = NULL;
-    (void) unlink(clone_info->filename);
+    (void) remove_utf8(clone_info->filename);
   }
 
   CacheBlock = AcquireQuantumMemory((size_t)((Size<16384)?Size:16384),sizeof(unsigned char *));
   if(CacheBlock==NULL) return NULL;
   DecompressBlock = AcquireQuantumMemory((size_t)(4096),sizeof(unsigned char *));
-  if(DecompressBlock==NULL) 
+  if(DecompressBlock==NULL)
   {
-    RelinquishMagickMemory(CacheBlock);    
+    RelinquishMagickMemory(CacheBlock);
     return NULL;
   }
 
-  mat_file = fdopen(AcquireUniqueFileResource(clone_info->filename),"w");
+  mat_file=0;
+  file = AcquireUniqueFileResource(clone_info->filename);
+  if (file != -1)
+    mat_file = fdopen(file,"w");
   if(!mat_file)
   {
     RelinquishMagickMemory(CacheBlock);
     RelinquishMagickMemory(DecompressBlock);
-    (void) LogMagickEvent(CoderEvent,GetMagickModule(),"Gannot create file stream for PS image");
+    (void) LogMagickEvent(CoderEvent,GetMagickModule(),"Cannot create file stream for decompressed image");
     return NULL;
   }
 
   zip_info.zalloc=AcquireZIPMemory;
   zip_info.zfree=RelinquishZIPMemory;
   zip_info.opaque = (voidpf) NULL;
-  inflateInit(&zip_info);
+  zip_status = inflateInit(&zip_info);
+  if (zip_status != Z_OK)
+    {
+      RelinquishMagickMemory(CacheBlock);
+      RelinquishMagickMemory(DecompressBlock);
+      (void) ThrowMagickException(exception,GetMagickModule(),CorruptImageError,
+        "UnableToUncompressImage","`%s'",clone_info->filename);
+      (void) fclose(mat_file);
+      RelinquishUniqueFileResource(clone_info->filename);
+      return NULL;
+    }
   /* zip_info.next_out = 8*4;*/
 
   zip_info.avail_in = 0;
   zip_info.total_out = 0;
   while(Size>0 && !EOFBlob(orig))
-  {    
+  {
     magick_size = ReadBlob(orig, (Size<16384)?Size:16384, (unsigned char *) CacheBlock);
     zip_info.next_in = (Bytef *) CacheBlock;
-    zip_info.avail_in = (uInt) magick_size;    
+    zip_info.avail_in = (uInt) magick_size;
 
     while(zip_info.avail_in>0)
     {
-      zip_info.avail_out = 4096;    
+      zip_info.avail_out = 4096;
       zip_info.next_out = (Bytef *) DecompressBlock;
-      status = inflate(&zip_info,Z_NO_FLUSH);      
+      zip_status = inflate(&zip_info,Z_NO_FLUSH);
+      if ((zip_status != Z_OK) && (zip_status != Z_STREAM_END))
+        break;
       extent=fwrite(DecompressBlock, 4096-zip_info.avail_out, 1, mat_file);
       (void) extent;
 
-      if(status == Z_STREAM_END) goto DblBreak;
+      if(zip_status == Z_STREAM_END) goto DblBreak;
     }
+    if ((zip_status != Z_OK) && (zip_status != Z_STREAM_END))
+      break;
 
     Size -= magick_size;
   }
 DblBreak:
- 
+
+  inflateEnd(&zip_info);
   (void)fclose(mat_file);
   RelinquishMagickMemory(CacheBlock);
   RelinquishMagickMemory(DecompressBlock);
 
   if((clone_info->file=fopen(clone_info->filename,"rb"))==NULL) goto UnlinkFile;
-  if( (image2 = AcquireImage(clone_info))==NULL ) goto EraseFile;  
+  if( (image2 = AcquireImage(clone_info,exception))==NULL ) goto EraseFile;
   status = OpenBlob(clone_info,image2,ReadBinaryBlobMode,exception);
   if (status == MagickFalse)
   {
-    DeleteImageFromList(&image2);    
+    DeleteImageFromList(&image2);
 EraseFile:
     fclose(clone_info->file);
     clone_info->file = NULL;
 UnlinkFile:
-    (void) unlink(clone_info->filename);
-    return NULL; 
+    RelinquishUniqueFileResource(clone_info->filename);
+    return NULL;
   }
 
   return image2;
 }
 #endif
+
+static Image *ReadMATImageV4(const ImageInfo *image_info,Image *image,
+  ExceptionInfo *exception)
+{
+  typedef struct {
+    unsigned char Type[4];
+    unsigned int nRows;
+    unsigned int nCols;
+    unsigned int imagf;
+    unsigned int nameLen;
+  } MAT4_HDR;
+
+  long
+    ldblk;
+
+  EndianType
+    endian;
+
+  Image
+    *rotate_image;
+
+  MagickBooleanType
+    status;
+
+  MAT4_HDR
+    HDR;
+
+  QuantumInfo
+    *quantum_info;
+
+  QuantumFormatType
+    format_type;
+
+  register ssize_t
+    i;
+
+  ssize_t
+    count,
+    y;
+
+  unsigned char
+    *pixels;
+
+  unsigned int
+    depth;
+
+  (void) SeekBlob(image,0,SEEK_SET);
+  ldblk=ReadBlobLSBLong(image);
+  if ((ldblk > 9999) || (ldblk < 0))
+    return((Image *) NULL);
+  HDR.Type[3]=ldblk % 10; ldblk /= 10;  /* T digit */
+  HDR.Type[2]=ldblk % 10; ldblk /= 10;  /* P digit */
+  HDR.Type[1]=ldblk % 10; ldblk /= 10;  /* O digit */
+  HDR.Type[0]=ldblk;        /* M digit */
+  if (HDR.Type[3] != 0) return((Image *) NULL);    /* Data format */
+  if (HDR.Type[2] != 0) return((Image *) NULL);    /* Always 0 */
+  if (HDR.Type[0] == 0)
+    {
+      HDR.nRows=ReadBlobLSBLong(image);
+      HDR.nCols=ReadBlobLSBLong(image);
+      HDR.imagf=ReadBlobLSBLong(image);
+      HDR.nameLen=ReadBlobLSBLong(image);
+      endian=LSBEndian;
+    }
+  else
+    {
+      HDR.nRows=ReadBlobMSBLong(image);
+      HDR.nCols=ReadBlobMSBLong(image);
+      HDR.imagf=ReadBlobMSBLong(image);
+      HDR.nameLen=ReadBlobMSBLong(image);
+      endian=MSBEndian;
+    }
+  if (HDR.nameLen > 0xFFFF)
+    return((Image *) NULL);
+  for (i=0; i < (ssize_t) HDR.nameLen; i++)
+  {
+    int
+      byte;
+
+    /*
+      Skip matrix name.
+    */
+    byte=ReadBlobByte(image);
+    if (byte == EOF)
+      return((Image *) NULL);
+  }
+  image->columns=(size_t) HDR.nRows;
+  image->rows=(size_t) HDR.nCols;
+  SetImageColorspace(image,GRAYColorspace,exception);
+  if (image_info->ping != MagickFalse)
+    {
+      Swap(image->columns,image->rows);
+      return(image);
+    }
+  status=SetImageExtent(image,image->columns,image->rows,exception);
+  if (status == MagickFalse)
+    return((Image *) NULL);
+  quantum_info=AcquireQuantumInfo(image_info,image);
+  if (quantum_info == (QuantumInfo *) NULL)
+    return((Image *) NULL);
+  switch(HDR.Type[1])
+  {
+    case 0:
+      format_type=FloatingPointQuantumFormat;
+      depth=64;
+      break;
+    case 1:
+      format_type=FloatingPointQuantumFormat;
+      depth=32;
+      break;
+    case 2:
+      format_type=UnsignedQuantumFormat;
+      depth=16;
+      break;
+    case 3:
+      format_type=SignedQuantumFormat;
+      depth=16;
+    case 4:
+      format_type=UnsignedQuantumFormat;
+      depth=8;
+      break;
+    default:
+      format_type=UnsignedQuantumFormat;
+      depth=8;
+      break;
+  }
+  image->depth=depth;
+  if (HDR.Type[0] != 0)
+    SetQuantumEndian(image,quantum_info,MSBEndian);
+  status=SetQuantumFormat(image,quantum_info,format_type);
+  status=SetQuantumDepth(image,quantum_info,depth);
+  status=SetQuantumEndian(image,quantum_info,endian);
+  SetQuantumScale(quantum_info,1.0);
+  pixels=(unsigned char *) GetQuantumPixels(quantum_info);
+  for (y=0; y < (ssize_t) image->rows; y++)
+  {
+    int
+      status;
+
+    register Quantum
+      *magick_restrict q;
+
+    count=ReadBlob(image,depth/8*image->columns,(char *) pixels);
+    if (count == -1)
+      break;
+    q=QueueAuthenticPixels(image,0,image->rows-y-1,image->columns,1,exception);
+    if (q == (Quantum *) NULL)
+      break;
+    (void) ImportQuantumPixels(image,(CacheView *) NULL,quantum_info,
+      GrayQuantum,pixels,exception);
+    if ((HDR.Type[1] == 2) || (HDR.Type[1] == 3))
+      FixSignedValues(image,q,(int) image->columns);
+    if (SyncAuthenticPixels(image,exception) == MagickFalse)
+      break;
+    if (image->previous == (Image *) NULL)
+      {
+        status=SetImageProgress(image,LoadImageTag,(MagickOffsetType) y,
+          image->rows);
+        if (status == MagickFalse)
+          break;
+      }
+  }
+  if (HDR.imagf == 1)
+    for (y=0; y < (ssize_t) image->rows; y++)
+    {
+      /*
+        Read complex pixels.
+      */
+      count=ReadBlob(image,depth/8*image->columns,(char *) pixels);
+      if (count == -1)
+        break;
+      if (HDR.Type[1] == 0)
+        InsertComplexDoubleRow(image,(double *) pixels,y,0,0,exception);
+      else
+        InsertComplexFloatRow(image,(float *) pixels,y,0,0,exception);
+    }
+  quantum_info=DestroyQuantumInfo(quantum_info);
+  rotate_image=RotateImage(image,90.0,exception);
+  if (rotate_image != (Image *) NULL)
+    {
+      image=DestroyImage(image);
+      image=rotate_image;
+    }
+  return(image);
+}
 
 /*
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -592,23 +796,15 @@ UnlinkFile:
 %    o exception: return any errors or warnings in this structure.
 %
 */
-
-static inline size_t MagickMin(const size_t x,const size_t y)
-{
-  if (x < y)
-    return(x);
-  return(y);
-}
-
 static Image *ReadMATImage(const ImageInfo *image_info,ExceptionInfo *exception)
 {
   Image *image, *image2=NULL,
    *rotated_image;
-  PixelPacket *q;
+  register Quantum *q;
 
   unsigned int status;
   MATHeader MATLAB_HDR;
-  size_t size;  
+  size_t size;
   size_t CellType;
   QuantumInfo *quantum_info;
   ImageInfo *clone_info;
@@ -616,14 +812,14 @@ static Image *ReadMATImage(const ImageInfo *image_info,ExceptionInfo *exception)
   ssize_t ldblk;
   unsigned char *BImgBuff = NULL;
   double MinVal, MaxVal;
-  size_t Unknown6;
-  unsigned z;
+  unsigned z, z2;
+  unsigned Frames;
   int logging;
   int sample_size;
   MagickOffsetType filepos=0x80;
   BlobInfo *blob;
   size_t one;
-  
+
   unsigned int (*ReadBlobXXXLong)(Image *image);
   unsigned short (*ReadBlobXXXShort)(Image *image);
   void (*ReadBlobDoublesXXX)(Image * image, size_t len, double *data);
@@ -631,15 +827,15 @@ static Image *ReadMATImage(const ImageInfo *image_info,ExceptionInfo *exception)
 
 
   assert(image_info != (const ImageInfo *) NULL);
-  assert(image_info->signature == MagickSignature);
+  assert(image_info->signature == MagickCoreSignature);
   assert(exception != (ExceptionInfo *) NULL);
-  assert(exception->signature == MagickSignature);
-  logging = LogMagickEvent(CoderEvent,GetMagickModule(),"enter"); 
+  assert(exception->signature == MagickCoreSignature);
+  logging = LogMagickEvent(CoderEvent,GetMagickModule(),"enter");
 
   /*
      Open image file.
    */
-  image = AcquireImage(image_info);
+  image = AcquireImage(image_info,exception);
 
   status = OpenBlob(image_info, image, ReadBinaryBlobMode, exception);
   if (status == MagickFalse)
@@ -651,14 +847,23 @@ static Image *ReadMATImage(const ImageInfo *image_info,ExceptionInfo *exception)
      Read MATLAB image.
    */
   clone_info=CloneImageInfo(image_info);
-  if(ReadBlob(image,124,(unsigned char *) &MATLAB_HDR.identific) != 124)
+  if (ReadBlob(image,124,(unsigned char *) &MATLAB_HDR.identific) != 124)
     ThrowReaderException(CorruptImageError,"ImproperImageHeader");
+  if (strncmp(MATLAB_HDR.identific,"MATLAB",6) != 0)
+    {
+      image2=ReadMATImageV4(image_info,image,exception);
+      if (image2  == NULL)
+        goto MATLAB_KO;
+      image=image2;
+      goto END_OF_READING;
+    }
   MATLAB_HDR.Version = ReadBlobLSBShort(image);
   if(ReadBlob(image,2,(unsigned char *) &MATLAB_HDR.EndianIndicator) != 2)
     ThrowReaderException(CorruptImageError,"ImproperImageHeader");
 
-  if (logging) (void)LogMagickEvent(CoderEvent,GetMagickModule(),"  Endian %c%c",
-        MATLAB_HDR.EndianIndicator[0],MATLAB_HDR.EndianIndicator[1]);
+  if (logging)
+    (void) LogMagickEvent(CoderEvent,GetMagickModule(),"  Endian %c%c",
+      MATLAB_HDR.EndianIndicator[0],MATLAB_HDR.EndianIndicator[1]);
   if (!strncmp(MATLAB_HDR.EndianIndicator, "IM", 2))
   {
     ReadBlobXXXLong = ReadBlobLSBLong;
@@ -666,7 +871,7 @@ static Image *ReadMATImage(const ImageInfo *image_info,ExceptionInfo *exception)
     ReadBlobDoublesXXX = ReadBlobDoublesLSB;
     ReadBlobFloatsXXX = ReadBlobFloatsLSB;
     image->endian = LSBEndian;
-  } 
+  }
   else if (!strncmp(MATLAB_HDR.EndianIndicator, "MI", 2))
   {
     ReadBlobXXXLong = ReadBlobMSBLong;
@@ -675,7 +880,7 @@ static Image *ReadMATImage(const ImageInfo *image_info,ExceptionInfo *exception)
     ReadBlobFloatsXXX = ReadBlobFloatsMSB;
     image->endian = MSBEndian;
   }
-  else 
+  else
     goto MATLAB_KO;    /* unsupported endian */
 
   if (strncmp(MATLAB_HDR.identific, "MATLAB", 6))
@@ -684,6 +889,7 @@ MATLAB_KO: ThrowReaderException(CorruptImageError,"ImproperImageHeader");
   filepos = TellBlob(image);
   while(!EOFBlob(image)) /* object parser loop */
   {
+    Frames = 1;
     (void) SeekBlob(image,filepos,SEEK_SET);
     /* printf("pos=%X\n",TellBlob(image)); */
 
@@ -701,16 +907,16 @@ MATLAB_KO: ThrowReaderException(CorruptImageError,"ImproperImageHeader");
       if(image2==NULL) continue;
       MATLAB_HDR.DataType = ReadBlobXXXLong(image2); /* replace compressed object type. */
     }
-#endif    
+#endif
 
     if(MATLAB_HDR.DataType!=miMATRIX) continue;  /* skip another objects. */
- 
+
     MATLAB_HDR.unknown1 = ReadBlobXXXLong(image2);
-    MATLAB_HDR.unknown2 = ReadBlobXXXLong(image2);  
+    MATLAB_HDR.unknown2 = ReadBlobXXXLong(image2);
 
     MATLAB_HDR.unknown5 = ReadBlobXXXLong(image2);
     MATLAB_HDR.StructureClass = MATLAB_HDR.unknown5 & 0xFF;
-    MATLAB_HDR.StructureFlag = (MATLAB_HDR.unknown5>>8) & 0xFF;  
+    MATLAB_HDR.StructureFlag = (MATLAB_HDR.unknown5>>8) & 0xFF;
 
     MATLAB_HDR.unknown3 = ReadBlobXXXLong(image2);
     if(image!=image2)
@@ -718,26 +924,32 @@ MATLAB_KO: ThrowReaderException(CorruptImageError,"ImproperImageHeader");
     MATLAB_HDR.unknown4 = ReadBlobXXXLong(image2);
     MATLAB_HDR.DimFlag = ReadBlobXXXLong(image2);
     MATLAB_HDR.SizeX = ReadBlobXXXLong(image2);
-    MATLAB_HDR.SizeY = ReadBlobXXXLong(image2);  
-   
+    MATLAB_HDR.SizeY = ReadBlobXXXLong(image2);
+
 
     switch(MATLAB_HDR.DimFlag)
-    {     
-      case  8: z=1; break;      /* 2D matrix*/
-      case 12: z = ReadBlobXXXLong(image2);  /* 3D matrix RGB*/
-           Unknown6 = ReadBlobXXXLong(image2);
-           (void) Unknown6;
+    {
+      case  8: z2=z=1; break;      /* 2D matrix*/
+      case 12: z2=z = ReadBlobXXXLong(image2);  /* 3D matrix RGB*/
+           (void) ReadBlobXXXLong(image2);
          if(z!=3) ThrowReaderException(CoderError, "MultidimensionalMatricesAreNotSupported");
          break;
+      case 16: z2=z = ReadBlobXXXLong(image2);  /* 4D matrix animation */
+         if(z!=3 && z!=1)
+            ThrowReaderException(CoderError, "MultidimensionalMatricesAreNotSupported");
+         Frames = ReadBlobXXXLong(image2);
+         if (Frames == 0)
+           ThrowReaderException(CorruptImageError,"ImproperImageHeader");
+         break;
       default: ThrowReaderException(CoderError, "MultidimensionalMatricesAreNotSupported");
-    }  
+    }
 
     MATLAB_HDR.Flag1 = ReadBlobXXXShort(image2);
     MATLAB_HDR.NameFlag = ReadBlobXXXShort(image2);
 
     if (logging) (void)LogMagickEvent(CoderEvent,GetMagickModule(),
           "MATLAB_HDR.StructureClass %d",MATLAB_HDR.StructureClass);
-    if (MATLAB_HDR.StructureClass != mxCHAR_CLASS && 
+    if (MATLAB_HDR.StructureClass != mxCHAR_CLASS &&
         MATLAB_HDR.StructureClass != mxSINGLE_CLASS &&    /* float + complex float */
         MATLAB_HDR.StructureClass != mxDOUBLE_CLASS &&    /* double + complex double */
         MATLAB_HDR.StructureClass != mxINT8_CLASS &&
@@ -771,24 +983,20 @@ MATLAB_KO: ThrowReaderException(CorruptImageError,"ImproperImageHeader");
     if (logging)
       (void) LogMagickEvent(CoderEvent,GetMagickModule(),
         "MATLAB_HDR.CellType: %.20g",(double) CellType);
-  
+
     (void) ReadBlob(image2, 4, (unsigned char *) &size);     /* data size */
 
-      /* Image is gray when no complex flag is set and 2D Matrix */
-    if ((MATLAB_HDR.DimFlag == 8) &&
-        ((MATLAB_HDR.StructureFlag & FLAG_COMPLEX) == 0))
-      image->type=GrayscaleType;
-
+    NEXT_FRAME:
     switch (CellType)
     {
       case miINT8:
       case miUINT8:
         sample_size = 8;
-        if(MATLAB_HDR.StructureFlag & FLAG_LOGICAL) 
+        if(MATLAB_HDR.StructureFlag & FLAG_LOGICAL)
           image->depth = 1;
         else
           image->depth = 8;         /* Byte type cell */
-        ldblk = (ssize_t) MATLAB_HDR.SizeX;      
+        ldblk = (ssize_t) MATLAB_HDR.SizeX;
         break;
       case miINT16:
       case miUINT16:
@@ -800,14 +1008,14 @@ MATLAB_KO: ThrowReaderException(CorruptImageError,"ImproperImageHeader");
       case miUINT32:
         sample_size = 32;
         image->depth = 32;        /* Dword type cell */
-        ldblk = (ssize_t) (4 * MATLAB_HDR.SizeX);      
+        ldblk = (ssize_t) (4 * MATLAB_HDR.SizeX);
         break;
       case miINT64:
       case miUINT64:
         sample_size = 64;
         image->depth = 64;        /* Qword type cell */
-        ldblk = (ssize_t) (8 * MATLAB_HDR.SizeX);      
-        break;   
+        ldblk = (ssize_t) (8 * MATLAB_HDR.SizeX);
+        break;
       case miSINGLE:
         sample_size = 32;
         image->depth = 32;        /* double type cell */
@@ -818,13 +1026,15 @@ MATLAB_KO: ThrowReaderException(CorruptImageError,"ImproperImageHeader");
         ldblk = (ssize_t) (4 * MATLAB_HDR.SizeX);
         break;
       case miDOUBLE:
-        sample_size = 64; 
+        sample_size = 64;
         image->depth = 64;        /* double type cell */
         (void) SetImageOption(clone_info,"quantum:format","floating-point");
+DisableMSCWarning(4127)
         if (sizeof(double) != 8)
+RestoreMSCWarning
           ThrowReaderException(CoderError, "IncompatibleSizeOfDouble");
         if (MATLAB_HDR.StructureFlag & FLAG_COMPLEX)
-  {                         /* complex double type cell */        
+  {                         /* complex double type cell */
   }
         ldblk = (ssize_t) (8 * MATLAB_HDR.SizeX);
         break;
@@ -833,7 +1043,7 @@ MATLAB_KO: ThrowReaderException(CorruptImageError,"ImproperImageHeader");
     }
     (void) sample_size;
     image->columns = MATLAB_HDR.SizeX;
-    image->rows = MATLAB_HDR.SizeY;    
+    image->rows = MATLAB_HDR.SizeY;
     quantum_info=AcquireQuantumInfo(clone_info,image);
     if (quantum_info == (QuantumInfo *) NULL)
       ThrowReaderException(ResourceLimitError,"MemoryAllocationFailed");
@@ -841,17 +1051,14 @@ MATLAB_KO: ThrowReaderException(CorruptImageError,"ImproperImageHeader");
     image->colors = one << image->depth;
     if (image->columns == 0 || image->rows == 0)
       goto MATLAB_KO;
-
-    /* ----- Create gray palette ----- */
-
-    if (CellType==miUINT8 && z!=3)
-    {
-      if(image->colors>256) image->colors = 256;
-
-      if (!AcquireImageColormap(image, image->colors))
+    /* Image is gray when no complex flag is set and 2D Matrix */
+    if ((MATLAB_HDR.DimFlag == 8) &&
+        ((MATLAB_HDR.StructureFlag & FLAG_COMPLEX) == 0))
       {
- NoMemory:ThrowReaderException(ResourceLimitError,"MemoryAllocationFailed");}
-    }
+        image->type=GrayscaleType;
+        SetImageColorspace(image,GRAYColorspace,exception);
+      }
+
 
     /*
       If ping is true, then only set image size and colors without
@@ -863,12 +1070,15 @@ MATLAB_KO: ThrowReaderException(CorruptImageError,"ImproperImageHeader");
       image->columns = image->rows;
       image->rows = temp;
       goto done_reading; /* !!!!!! BAD  !!!! */
-    }  
+    }
+    status=SetImageExtent(image,image->columns,image->rows,exception);
+    if (status == MagickFalse)
+      return(DestroyImageList(image));
 
   /* ----- Load raster data ----- */
-    BImgBuff = (unsigned char *) AcquireQuantumMemory((size_t) (ldblk),sizeof(unsigned char *));    /* Ldblk was set in the check phase */
+    BImgBuff = (unsigned char *) AcquireQuantumMemory((size_t) (ldblk),sizeof(double));    /* Ldblk was set in the check phase */
     if (BImgBuff == NULL)
-      goto NoMemory;
+      ThrowReaderException(ResourceLimitError,"MemoryAllocationFailed");
 
     MinVal = 0;
     MaxVal = 0;
@@ -884,8 +1094,8 @@ MATLAB_KO: ThrowReaderException(CorruptImageError,"ImproperImageHeader");
     {
       for (i = 0; i < (ssize_t) MATLAB_HDR.SizeY; i++)
       {
-        q=QueueAuthenticPixels(image,0,MATLAB_HDR.SizeY-i-1,image->columns,1,exception);
-        if (q == (PixelPacket *)NULL)
+        q=GetAuthenticPixels(image,0,MATLAB_HDR.SizeY-i-1,image->columns,1,exception);
+        if (q == (Quantum *) NULL)
   {
     if (logging) (void)LogMagickEvent(CoderEvent,GetMagickModule(),
               "  MAT set image pixels returns unexpected NULL on a row %u.", (unsigned)(MATLAB_HDR.SizeY-i-1));
@@ -916,7 +1126,7 @@ ImportQuantumPixelsFailed:
 
           if (z<=1 &&       /* fix only during a last pass z==0 || z==1 */
           (CellType==miINT8 || CellType==miINT16 || CellType==miINT32 || CellType==miINT64))
-      FixSignedValues(q,MATLAB_HDR.SizeX);
+      FixSignedValues(image,q,MATLAB_HDR.SizeX);
         }
 
         if (!SyncAuthenticPixels(image,exception))
@@ -927,6 +1137,7 @@ ImportQuantumPixelsFailed:
   }
       }
     } while(z-- >= 2);
+    quantum_info=DestroyQuantumInfo(quantum_info);
 ExitLoop:
 
 
@@ -938,22 +1149,24 @@ ExitLoop:
 
       if (CellType==miDOUBLE || CellType==miSINGLE)
       {
-        CalcMinMax(image2,  image_info->endian, MATLAB_HDR.SizeX, MATLAB_HDR.SizeY, CellType, ldblk, BImgBuff, &MinVal, &MaxVal);      
+        CalcMinMax(image2,  image_info->endian, MATLAB_HDR.SizeX, MATLAB_HDR.SizeY, CellType, ldblk, BImgBuff, &MinVal, &MaxVal);
       }
 
       if (CellType==miDOUBLE)
         for (i = 0; i < (ssize_t) MATLAB_HDR.SizeY; i++)
   {
           ReadBlobDoublesXXX(image2, ldblk, (double *)BImgBuff);
-          InsertComplexDoubleRow((double *)BImgBuff, i, image, MinVal, MaxVal);
+          InsertComplexDoubleRow(image, (double *)BImgBuff, i, MinVal, MaxVal,
+            exception);
   }
 
       if (CellType==miSINGLE)
         for (i = 0; i < (ssize_t) MATLAB_HDR.SizeY; i++)
   {
           ReadBlobFloatsXXX(image2, ldblk, (float *)BImgBuff);
-          InsertComplexFloatRow((float *)BImgBuff, i, image, MinVal, MaxVal);
-  }    
+          InsertComplexFloatRow(image,(float *)BImgBuff,i,MinVal,MaxVal,
+            exception);
+  }
     }
 
       /* Image is gray when no complex flag is set and 2D Matrix AGAIN!!! */
@@ -978,8 +1191,8 @@ ExitLoop:
       rotated_image->blob = image->blob;
       rotated_image->colors = image->colors;
       image->blob = blob;
-      AppendImageToList(&image,rotated_image);      
-      DeleteImageFromList(&image);      
+      AppendImageToList(&image,rotated_image);
+      DeleteImageFromList(&image);
     }
 
 done_reading:
@@ -987,45 +1200,67 @@ done_reading:
     if(image2!=NULL)
       if(image2!=image)
       {
-        DeleteImageFromList(&image2); 
+        DeleteImageFromList(&image2);
   if(clone_info)
   {
           if(clone_info->file)
     {
             fclose(clone_info->file);
             clone_info->file = NULL;
-            (void) unlink(clone_info->filename);
+            (void) remove_utf8(clone_info->filename);
     }
-        }    
+        }
       }
 
-      /* Allocate next image structure. */    
-    AcquireNextImage(image_info,image);
-    if (image->next == (Image *) NULL) break;                
+      /* Allocate next image structure. */
+    AcquireNextImage(image_info,image,exception);
+    if (image->next == (Image *) NULL) break;
     image=SyncNextImageInList(image);
     image->columns=image->rows=0;
-    image->colors=0;    
+    image->colors=0;
 
       /* row scan buffer is no longer needed */
     RelinquishMagickMemory(BImgBuff);
     BImgBuff = NULL;
+
+    if(--Frames>0)
+    {
+      z = z2;
+      if(image2==NULL) image2 = image;
+      goto NEXT_FRAME;
+    }
+    if ((image2!=NULL) && (image2!=image))   /* Does shadow temporary decompressed image exist? */
+      {
+/*  CloseBlob(image2); */
+        DeleteImageFromList(&image2);
+        if(clone_info)
+        {
+          if(clone_info->file)
+          {
+            fclose(clone_info->file);
+            clone_info->file = NULL;
+            (void) remove_utf8(clone_info->filename);
+          }
+        }
+        }
   }
-    clone_info=DestroyImageInfo(clone_info);
 
   RelinquishMagickMemory(BImgBuff);
+END_OF_READING:
+  clone_info=DestroyImageInfo(clone_info);
   CloseBlob(image);
 
 
   {
-    Image *p;    
+    Image *p;
     ssize_t scene=0;
-    
+
     /*
       Rewind list, removing any empty images while rewinding.
     */
     p=image;
     image=NULL;
-    while (p != (Image *)NULL)
+    while (p != (Image *) NULL)
       {
         Image *tmp=p;
         if ((p->rows == 0) || (p->columns == 0)) {
@@ -1036,7 +1271,7 @@ done_reading:
           p=p->previous;
         }
       }
-    
+
     /*
       Fix scene numbers
     */
@@ -1050,7 +1285,7 @@ done_reading:
     {
       fclose(clone_info->file);
       clone_info->file = NULL;
-      (void) unlink(clone_info->filename);
+      (void) remove_utf8(clone_info->filename);
     }
     DestroyImageInfo(clone_info);
     clone_info = NULL;
@@ -1089,13 +1324,11 @@ ModuleExport size_t RegisterMATImage(void)
   MagickInfo
     *entry;
 
-  entry=SetMagickInfo("MAT");
+  entry=AcquireMagickInfo("MAT","MAT","MATLAB level 5 image format");
   entry->decoder=(DecodeImageHandler *) ReadMATImage;
   entry->encoder=(EncodeImageHandler *) WriteMATImage;
-  entry->blob_support=MagickFalse;
-  entry->seekable_stream=MagickTrue;
-  entry->description=AcquireString("MATLAB level 5 image format");
-  entry->module=AcquireString("MAT");
+  entry->flags^=CoderBlobSupportFlag;
+  entry->flags|=CoderSeekableStreamFlag;
   (void) RegisterMagickInfo(entry);
   return(MagickImageCoderSignature);
 }
@@ -1135,31 +1368,28 @@ ModuleExport void UnregisterMATImage(void)
 %                                                                             %
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %
-%  Function WriteMATImage writes an Matlab matrix to a file.  
+%  Function WriteMATImage writes an Matlab matrix to a file.
 %
 %  The format of the WriteMATImage method is:
 %
-%      unsigned int WriteMATImage(const ImageInfo *image_info,Image *image)
+%      MagickBooleanType WriteMATImage(const ImageInfo *image_info,
+%        Image *image,ExceptionInfo *exception)
 %
 %  A description of each parameter follows.
-%
-%    o status: Function WriteMATImage return True if the image is written.
-%      False is returned is there is a memory shortage or if the image file
-%      fails to write.
 %
 %    o image_info: Specifies a pointer to a ImageInfo structure.
 %
 %    o image:  A pointer to an Image structure.
 %
+%    o exception: return any errors or warnings in this structure.
+%
 */
-static MagickBooleanType WriteMATImage(const ImageInfo *image_info,Image *image)
+static MagickBooleanType WriteMATImage(const ImageInfo *image_info,Image *image,
+  ExceptionInfo *exception)
 {
-  ExceptionInfo
-    *exception;
-
   ssize_t y;
   unsigned z;
-  const PixelPacket *p;
+  register const Quantum *p;
 
   unsigned int status;
   int logging;
@@ -1181,12 +1411,14 @@ static MagickBooleanType WriteMATImage(const ImageInfo *image_info,Image *image)
     Open output image file.
   */
   assert(image_info != (const ImageInfo *) NULL);
-  assert(image_info->signature == MagickSignature);
+  assert(image_info->signature == MagickCoreSignature);
   assert(image != (Image *) NULL);
-  assert(image->signature == MagickSignature);
+  assert(image->signature == MagickCoreSignature);
   logging=LogMagickEvent(CoderEvent,GetMagickModule(),"enter MAT");
   (void) logging;
-  status=OpenBlob(image_info,image,WriteBinaryBlobMode,&image->exception);
+  assert(exception != (ExceptionInfo *) NULL);
+  assert(exception->signature == MagickCoreSignature);
+  status=OpenBlob(image_info,image,WriteBinaryBlobMode,exception);
   if (status == MagickFalse)
     return(MagickFalse);
   image->depth=8;
@@ -1198,7 +1430,8 @@ static MagickBooleanType WriteMATImage(const ImageInfo *image_info,Image *image)
   (void) memcpy(&local_time,localtime(&current_time),sizeof(local_time));
 #endif
   (void) memset(MATLAB_HDR,' ',MagickMin(sizeof(MATLAB_HDR),124));
-  FormatLocaleString(MATLAB_HDR,MaxTextExtent,"MATLAB 5.0 MAT-file, Platform: %s, Created on: %s %s %2d %2d:%2d:%2d %d",
+  FormatLocaleString(MATLAB_HDR,sizeof(MATLAB_HDR),
+    "MATLAB 5.0 MAT-file, Platform: %s, Created on: %s %s %2d %2d:%2d:%2d %d",
     OsDesc,DayOfWTab[local_time.tm_wday],MonthsTab[local_time.tm_mon],
     local_time.tm_mday,local_time.tm_hour,local_time.tm_min,
     local_time.tm_sec,local_time.tm_year+1900);
@@ -1210,10 +1443,8 @@ static MagickBooleanType WriteMATImage(const ImageInfo *image_info,Image *image)
   scene=0;
   do
   {
-    if (image->colorspace != RGBColorspace)
-      (void) TransformImageColorspace(image,RGBColorspace);
-
-    is_gray = IsGrayImage(image,&image->exception);
+    (void) TransformImageColorspace(image,sRGBColorspace,exception);
+    is_gray = SetImageGray(image,exception);
     z = is_gray ? 0 : 3;
 
     /*
@@ -1227,43 +1458,42 @@ static MagickBooleanType WriteMATImage(const ImageInfo *image_info,Image *image)
     (void) WriteBlobLSBLong(image, (unsigned int) DataSize+padding+(is_gray ? 48 : 56));
     (void) WriteBlobLSBLong(image, 0x6); /* 0x88 */
     (void) WriteBlobLSBLong(image, 0x8); /* 0x8C */
-    (void) WriteBlobLSBLong(image, 0x6); /* 0x90 */  
-    (void) WriteBlobLSBLong(image, 0);   
+    (void) WriteBlobLSBLong(image, 0x6); /* 0x90 */
+    (void) WriteBlobLSBLong(image, 0);
     (void) WriteBlobLSBLong(image, 0x5); /* 0x98 */
     (void) WriteBlobLSBLong(image, is_gray ? 0x8 : 0xC); /* 0x9C - DimFlag */
-    (void) WriteBlobLSBLong(image, (unsigned int) image->rows);    /* x: 0xA0 */  
-    (void) WriteBlobLSBLong(image, (unsigned int) image->columns); /* y: 0xA4 */  
+    (void) WriteBlobLSBLong(image, (unsigned int) image->rows);    /* x: 0xA0 */
+    (void) WriteBlobLSBLong(image, (unsigned int) image->columns); /* y: 0xA4 */
     if(!is_gray)
     {
-      (void) WriteBlobLSBLong(image, 3); /* z: 0xA8 */  
+      (void) WriteBlobLSBLong(image, 3); /* z: 0xA8 */
       (void) WriteBlobLSBLong(image, 0);
     }
-    (void) WriteBlobLSBShort(image, 1);  /* 0xB0 */  
+    (void) WriteBlobLSBShort(image, 1);  /* 0xB0 */
     (void) WriteBlobLSBShort(image, 1);  /* 0xB2 */
     (void) WriteBlobLSBLong(image, 'M'); /* 0xB4 */
-    (void) WriteBlobLSBLong(image, 0x2); /* 0xB8 */  
+    (void) WriteBlobLSBLong(image, 0x2); /* 0xB8 */
     (void) WriteBlobLSBLong(image, (unsigned int) DataSize); /* 0xBC */
 
     /*
       Store image data.
     */
-    exception=(&image->exception);
     quantum_info=AcquireQuantumInfo(image_info,image);
     if (quantum_info == (QuantumInfo *) NULL)
       ThrowWriterException(ResourceLimitError,"MemoryAllocationFailed");
-    pixels=GetQuantumPixels(quantum_info);
+    pixels=(unsigned char *) GetQuantumPixels(quantum_info);
     do
     {
       for (y=0; y < (ssize_t)image->columns; y++)
       {
-        p=GetVirtualPixels(image,y,0,1,image->rows,&image->exception);
-        if (p == (const PixelPacket *) NULL)
+        p=GetVirtualPixels(image,y,0,1,image->rows,exception);
+        if (p == (const Quantum *) NULL)
           break;
-        (void) ExportQuantumPixels(image,(const CacheView *) NULL,quantum_info,
+        (void) ExportQuantumPixels(image,(CacheView *) NULL,quantum_info,
           z2qtype[z],pixels,exception);
         (void) WriteBlob(image,image->rows,pixels);
-      }    
-      if (!SyncAuthenticPixels(image,exception))
+      }
+      if (SyncAuthenticPixels(image,exception) == MagickFalse)
         break;
     } while(z-- >= 2);
     while(padding-->0) (void) WriteBlobByte(image,0);

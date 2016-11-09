@@ -47,26 +47,29 @@
 /*
   Include declarations.
 */
-#include "magick/studio.h"
-#include "magick/blob.h"
-#include "magick/blob-private.h"
-#include "magick/cache.h"
-#include "magick/color.h"
-#include "magick/color-private.h"
-#include "magick/colormap.h"
-#include "magick/colormap-private.h"
-#include "magick/exception.h"
-#include "magick/exception-private.h"
-#include "magick/image.h"
-#include "magick/image-private.h"
-#include "magick/list.h"
-#include "magick/magick.h"
-#include "magick/memory_.h"
-#include "magick/quantum-private.h"
-#include "magick/static.h"
-#include "magick/string_.h"
-#include "magick/module.h"
-#include "magick/utility.h"
+#include "MagickCore/studio.h"
+#include "MagickCore/attribute.h"
+#include "MagickCore/blob.h"
+#include "MagickCore/blob-private.h"
+#include "MagickCore/cache.h"
+#include "MagickCore/color.h"
+#include "MagickCore/color-private.h"
+#include "MagickCore/colormap.h"
+#include "MagickCore/colormap-private.h"
+#include "MagickCore/exception.h"
+#include "MagickCore/exception-private.h"
+#include "MagickCore/image.h"
+#include "MagickCore/image-private.h"
+#include "MagickCore/list.h"
+#include "MagickCore/magick.h"
+#include "MagickCore/memory_.h"
+#include "MagickCore/pixel-accessor.h"
+#include "MagickCore/quantum-private.h"
+#include "MagickCore/static.h"
+#include "MagickCore/string_.h"
+#include "MagickCore/module.h"
+#include "MagickCore/utility.h"
+#include "MagickCore/utility-private.h"
 
 typedef struct
 {
@@ -92,32 +95,28 @@ typedef struct
 } CUTPalHeader;
 
 
-static void InsertRow(ssize_t depth,unsigned char *p,ssize_t y,Image *image)
+static void InsertRow(Image *image,ssize_t depth,unsigned char *p,ssize_t y,
+  ExceptionInfo *exception)
 {
-  ExceptionInfo
-    *exception;
-
   size_t bit; ssize_t x;
-  register PixelPacket *q;
-  IndexPacket index;
-  register IndexPacket *indexes;
+  register Quantum *q;
+  Quantum index;
 
-  index=(IndexPacket) 0;
-  exception=(&image->exception);
+  index=0;
   switch (depth)
   {
     case 1:  /* Convert bitmap scanline. */
       {
         q=QueueAuthenticPixels(image,0,y,image->columns,1,exception);
-        if (q == (PixelPacket *) NULL)
+        if (q == (Quantum *) NULL)
           break;
-        indexes=GetAuthenticIndexQueue(image);
         for (x=0; x < ((ssize_t) image->columns-7); x+=8)
         {
           for (bit=0; bit < 8; bit++)
           {
-            index=(IndexPacket) ((((*p) & (0x80 >> bit)) != 0) ? 0x01 : 0x00);
-            SetIndexPixelComponent(indexes+x+bit,index);
+            index=(Quantum) ((((*p) & (0x80 >> bit)) != 0) ? 0x01 : 0x00);
+            SetPixelIndex(image,index,q);
+            q+=GetPixelChannels(image);
           }
           p++;
         }
@@ -125,131 +124,134 @@ static void InsertRow(ssize_t depth,unsigned char *p,ssize_t y,Image *image)
           {
             for (bit=0; bit < (image->columns % 8); bit++)
               {
-                index=(IndexPacket) ((((*p) & (0x80 >> bit)) != 0) ? 0x01 : 0x00);
-                SetIndexPixelComponent(indexes+x+bit,index);
+                index=(Quantum) ((((*p) & (0x80 >> bit)) != 0) ? 0x01 : 0x00);
+                SetPixelIndex(image,index,q);
+                q+=GetPixelChannels(image);
               }
             p++;
           }
-        if (SyncAuthenticPixels(image,exception) == MagickFalse)
-          break;
+        (void) SyncAuthenticPixels(image,exception);
         break;
       }
     case 2:  /* Convert PseudoColor scanline. */
       {
         q=QueueAuthenticPixels(image,0,y,image->columns,1,exception);
-        if (q == (PixelPacket *) NULL)
+        if (q == (Quantum *) NULL)
           break;
-        indexes=GetAuthenticIndexQueue(image);
         for (x=0; x < ((ssize_t) image->columns-1); x+=2)
-          {
-            index=ConstrainColormapIndex(image,(*p >> 6) & 0x3);
-            SetIndexPixelComponent(indexes+x,index);
-            index=ConstrainColormapIndex(image,(*p >> 4) & 0x3);
-            SetIndexPixelComponent(indexes+x,index);
-            index=ConstrainColormapIndex(image,(*p >> 2) & 0x3);
-            SetIndexPixelComponent(indexes+x,index);
-            index=ConstrainColormapIndex(image,(*p) & 0x3);
-            SetIndexPixelComponent(indexes+x+1,index);
-            p++;
-          }
+        {
+          index=ConstrainColormapIndex(image,(*p >> 6) & 0x3,exception);
+          SetPixelIndex(image,index,q);
+          q+=GetPixelChannels(image);
+          index=ConstrainColormapIndex(image,(*p >> 4) & 0x3,exception);
+          SetPixelIndex(image,index,q);
+          q+=GetPixelChannels(image);
+          index=ConstrainColormapIndex(image,(*p >> 2) & 0x3,exception);
+          SetPixelIndex(image,index,q);
+          q+=GetPixelChannels(image);
+          index=ConstrainColormapIndex(image,(*p) & 0x3,exception);
+          SetPixelIndex(image,index,q);
+          q+=GetPixelChannels(image);
+          p++;
+        }
         if ((image->columns % 4) != 0)
           {
-            index=ConstrainColormapIndex(image,(*p >> 6) & 0x3);
-            SetIndexPixelComponent(indexes+x,index);
+            index=ConstrainColormapIndex(image,(*p >> 6) & 0x3,exception);
+            SetPixelIndex(image,index,q);
+            q+=GetPixelChannels(image);
             if ((image->columns % 4) >= 1)
 
               {
-                index=ConstrainColormapIndex(image,(*p >> 4) & 0x3);
-                SetIndexPixelComponent(indexes+x,index);
+                index=ConstrainColormapIndex(image,(*p >> 4) & 0x3,exception);
+                SetPixelIndex(image,index,q);
+                q+=GetPixelChannels(image);
                 if ((image->columns % 4) >= 2)
 
                   {
-                    index=ConstrainColormapIndex(image,(*p >> 2) & 0x3);
-                    SetIndexPixelComponent(indexes+x,index);
+                    index=ConstrainColormapIndex(image,(*p >> 2) & 0x3,
+                      exception);
+                    SetPixelIndex(image,index,q);
+                    q+=GetPixelChannels(image);
                   }
               }
             p++;
           }
-        if (SyncAuthenticPixels(image,exception) == MagickFalse)
-          break;
+        (void) SyncAuthenticPixels(image,exception);
         break;
       }
 
     case 4:  /* Convert PseudoColor scanline. */
       {
         q=QueueAuthenticPixels(image,0,y,image->columns,1,exception);
-        if (q == (PixelPacket *) NULL)
+        if (q == (Quantum *) NULL)
           break;
-        indexes=GetAuthenticIndexQueue(image);
         for (x=0; x < ((ssize_t) image->columns-1); x+=2)
-          {
-            index=ConstrainColormapIndex(image,(*p >> 4) & 0xf);
-            SetIndexPixelComponent(indexes+x,index);
-            index=ConstrainColormapIndex(image,(*p) & 0xf);
-            SetIndexPixelComponent(indexes+x+1,index);
+        {
+            index=ConstrainColormapIndex(image,(*p >> 4) & 0xf,exception);
+            SetPixelIndex(image,index,q);
+            q+=GetPixelChannels(image);
+            index=ConstrainColormapIndex(image,(*p) & 0xf,exception);
+            SetPixelIndex(image,index,q);
+            q+=GetPixelChannels(image);
             p++;
           }
         if ((image->columns % 2) != 0)
           {
-            index=ConstrainColormapIndex(image,(*p >> 4) & 0xf);
-            SetIndexPixelComponent(indexes+x,index);
+            index=ConstrainColormapIndex(image,(*p >> 4) & 0xf,exception);
+            SetPixelIndex(image,index,q);
+            q+=GetPixelChannels(image);
             p++;
           }
-        if (SyncAuthenticPixels(image,exception) == MagickFalse)
-          break;
+        (void) SyncAuthenticPixels(image,exception);
         break;
       }
     case 8: /* Convert PseudoColor scanline. */
       {
         q=QueueAuthenticPixels(image,0,y,image->columns,1,exception);
-        if (q == (PixelPacket *) NULL) break;
-        indexes=GetAuthenticIndexQueue(image);
+        if (q == (Quantum *) NULL) break;
         for (x=0; x < (ssize_t) image->columns; x++)
         {
-          index=ConstrainColormapIndex(image,*p);
-          SetIndexPixelComponent(indexes+x,index);
+          index=ConstrainColormapIndex(image,*p,exception);
+          SetPixelIndex(image,index,q);
           p++;
+          q+=GetPixelChannels(image);
         }
-        if (SyncAuthenticPixels(image,exception) == MagickFalse)
-          break;
+        (void) SyncAuthenticPixels(image,exception);
+        break;
       }
-      break;
-
     }
 }
 
 /*
    Compute the number of colors in Grayed R[i]=G[i]=B[i] image
 */
-static int GetCutColors(Image *image)
+static int GetCutColors(Image *image,ExceptionInfo *exception)
 {
-  ExceptionInfo
-    *exception;
-
   Quantum
     intensity,
     scale_intensity;
 
-  register PixelPacket
+  register Quantum
     *q;
 
   ssize_t
     x,
     y;
 
-  exception=(&image->exception);
   intensity=0;
   scale_intensity=ScaleCharToQuantum(16);
   for (y=0; y < (ssize_t) image->rows; y++)
   {
     q=GetAuthenticPixels(image,0,y,image->columns,1,exception);
+    if (q == (Quantum *) NULL)
+      break;
     for (x=0; x < (ssize_t) image->columns; x++)
     {
-      if (intensity < GetRedPixelComponent(q))
-        intensity=GetRedPixelComponent(q);
+      if (intensity < GetPixelRed(image,q))
+        intensity=GetPixelRed(image,q);
       if (intensity >= scale_intensity)
         return(255);
-      q++;
+      q+=GetPixelChannels(image);
     }
   }
   if (intensity < ScaleCharToQuantum(2))
@@ -302,19 +304,19 @@ static Image *ReadCUTImage(const ImageInfo *image_info,ExceptionInfo *exception)
   ssize_t i,j;
   ssize_t ldblk;
   unsigned char *BImgBuff=NULL,*ptrB;
-  PixelPacket *q;
+  register Quantum *q;
 
   /*
     Open image file.
   */
   assert(image_info != (const ImageInfo *) NULL);
-  assert(image_info->signature == MagickSignature);
+  assert(image_info->signature == MagickCoreSignature);
   if (image_info->debug != MagickFalse)
     (void) LogMagickEvent(TraceEvent,GetMagickModule(),"%s",
       image_info->filename);
   assert(exception != (ExceptionInfo *) NULL);
-  assert(exception->signature == MagickSignature);
-  image=AcquireImage(image_info);
+  assert(exception->signature == MagickCoreSignature);
+  image=AcquireImage(image_info,exception);
   status=OpenBlob(image_info,image,ReadBinaryBlobMode,exception);
   if (status == MagickFalse)
     {
@@ -366,7 +368,10 @@ static Image *ReadCUTImage(const ImageInfo *image_info,ExceptionInfo *exception)
   image->depth=8;
   image->colors=(size_t) (GetQuantumRange(1UL*i)+1);
 
-  if (image_info->ping) goto Finish;
+  if (image_info->ping != MagickFalse) goto Finish;
+  status=SetImageExtent(image,image->columns,image->rows,exception);
+  if (status == MagickFalse)
+    return(DestroyImageList(image));
 
   /* ----- Do something with palette ----- */
   if ((clone_info=CloneImageInfo(image_info)) == NULL) goto NoPalette;
@@ -389,15 +394,15 @@ static Image *ReadCUTImage(const ImageInfo *image_info,ExceptionInfo *exception)
     }
 
   (void) CopyMagickString(clone_info->filename+i,".PAL",(size_t)
-    (MaxTextExtent-i));
-  if((clone_info->file=OpenMagickStream(clone_info->filename,"rb"))==NULL)
+    (MagickPathExtent-i));
+  if((clone_info->file=fopen_utf8(clone_info->filename,"rb"))==NULL)
     {
       (void) CopyMagickString(clone_info->filename+i,".pal",(size_t)
-        (MaxTextExtent-i));
-      if((clone_info->file=OpenMagickStream(clone_info->filename,"rb"))==NULL)
+        (MagickPathExtent-i));
+      if((clone_info->file=fopen_utf8(clone_info->filename,"rb"))==NULL)
         {
           clone_info->filename[i]='\0';
-          if((clone_info->file=OpenMagickStream(clone_info->filename,"rb"))==NULL)
+          if((clone_info->file=fopen_utf8(clone_info->filename,"rb"))==NULL)
             {
               clone_info=DestroyImageInfo(clone_info);
               clone_info=NULL;
@@ -406,7 +411,7 @@ static Image *ReadCUTImage(const ImageInfo *image_info,ExceptionInfo *exception)
         }
     }
 
-  if( (palette=AcquireImage(clone_info))==NULL ) goto NoPalette;
+  if( (palette=AcquireImage(clone_info,exception))==NULL ) goto NoPalette;
   status=OpenBlob(clone_info,palette,ReadBinaryBlobMode,exception);
   if (status == MagickFalse)
     {
@@ -435,7 +440,7 @@ static Image *ReadCUTImage(const ImageInfo *image_info,ExceptionInfo *exception)
 
       if(PalHeader.MaxIndex<1) goto ErasePalette;
       image->colors=PalHeader.MaxIndex+1;
-      if (AcquireImageColormap(image,image->colors) == MagickFalse) goto NoMemory;
+      if (AcquireImageColormap(image,image->colors,exception) == MagickFalse) goto NoMemory;
 
       if(PalHeader.MaxRed==0) PalHeader.MaxRed=(unsigned int) QuantumRange;  /*avoid division by 0*/
       if(PalHeader.MaxGreen==0) PalHeader.MaxGreen=(unsigned int) QuantumRange;
@@ -481,7 +486,7 @@ static Image *ReadCUTImage(const ImageInfo *image_info,ExceptionInfo *exception)
     {
 
       image->colors=256;
-      if (AcquireImageColormap(image,image->colors) == MagickFalse)
+      if (AcquireImageColormap(image,image->colors,exception) == MagickFalse)
         {
         NoMemory:
           ThrowReaderException(ResourceLimitError,"MemoryAllocationFailed");
@@ -542,9 +547,9 @@ static Image *ReadCUTImage(const ImageInfo *image_info,ExceptionInfo *exception)
           RunCountMasked=RunCount & 0x7F;
         }
 
-      InsertRow(depth,BImgBuff,i,image);
+      InsertRow(image,depth,BImgBuff,i,exception);
     }
-  (void) SyncImage(image);
+  (void) SyncImage(image,exception);
 
 
   /*detect monochrome image*/
@@ -552,9 +557,9 @@ static Image *ReadCUTImage(const ImageInfo *image_info,ExceptionInfo *exception)
   if(palette==NULL)
     {    /*attempt to detect binary (black&white) images*/
       if ((image->storage_class == PseudoClass) &&
-          (IsGrayImage(image,&image->exception) != MagickFalse))
+          (SetImageGray(image,exception) != MagickFalse))
         {
-          if(GetCutColors(image)==2)
+          if(GetCutColors(image,exception)==2)
             {
               for (i=0; i < (ssize_t)image->colors; i++)
                 {
@@ -567,19 +572,19 @@ static Image *ReadCUTImage(const ImageInfo *image_info,ExceptionInfo *exception)
                 }
 
               image->colormap[1].red=image->colormap[1].green=
-                image->colormap[1].blue=(Quantum) QuantumRange;
+                image->colormap[1].blue=QuantumRange;
               for (i=0; i < (ssize_t)image->rows; i++)
                 {
                   q=QueueAuthenticPixels(image,0,i,image->columns,1,exception);
                   for (j=0; j < (ssize_t)image->columns; j++)
                     {
-                      if (GetRedPixelComponent(q) == ScaleCharToQuantum(1))
+                      if (GetPixelRed(image,q) == ScaleCharToQuantum(1))
                         {
-                          SetRedPixelComponent(q,QuantumRange);
-                          SetGreenPixelComponent(q,QuantumRange);
-                          SetBluePixelComponent(q,QuantumRange);
+                          SetPixelRed(image,QuantumRange,q);
+                          SetPixelGreen(image,QuantumRange,q);
+                          SetPixelBlue(image,QuantumRange,q);
                         }
-                      q++;
+                      q+=GetPixelChannels(image);
                     }
                   if (SyncAuthenticPixels(image,exception) == MagickFalse) goto Finish;
                 }
@@ -629,11 +634,9 @@ ModuleExport size_t RegisterCUTImage(void)
   MagickInfo
     *entry;
 
-  entry=SetMagickInfo("CUT");
+  entry=AcquireMagickInfo("CUT","CUT","DR Halo");
   entry->decoder=(DecodeImageHandler *) ReadCUTImage;
-  entry->seekable_stream=MagickTrue;
-  entry->description=ConstantString("DR Halo");
-  entry->module=ConstantString("CUT");
+  entry->flags|=CoderSeekableStreamFlag;
   (void) RegisterMagickInfo(entry);
   return(MagickImageCoderSignature);
 }
