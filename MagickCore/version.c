@@ -517,9 +517,9 @@ MagickExport unsigned int GetMagickSignature(const StringInfo *nonce)
   signature=MAGICKCORE_QUANTUM_DEPTH;
   (void) memcpy(p,&signature,sizeof(signature));
   p+=sizeof(signature);
-  signature=MAGICKCORE_HDRI_ENABLE;
-  (void) memcpy(p,&signature,sizeof(signature));
-  p+=sizeof(signature);
+  //signature=MAGICKCORE_HDRI_ENABLE;
+  //(void) memcpy(p,&signature,sizeof(signature));
+  //p+=sizeof(signature);
   signature=MagickLibInterface;
   (void) memcpy(p,&signature,sizeof(signature));
   p+=sizeof(signature);

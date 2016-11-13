@@ -171,6 +171,7 @@ MagickExport void RegisterStaticModules(void)
   (void) RegisterAAIImage();
   (void) RegisterARTImage();
   (void) RegisterAVSImage();
+  (void) RegisterANALYZEImage();
   (void) RegisterBGRImage();
   (void) RegisterBMPImage();
   (void) RegisterBRAILLEImage();
@@ -358,6 +359,7 @@ MagickExport void UnregisterStaticModules(void)
   UnregisterAAIImage();
   UnregisterARTImage();
   UnregisterAVSImage();
+  UnregisterANALYZEImage();
   UnregisterBGRImage();
   UnregisterBMPImage();
   UnregisterBRAILLEImage();

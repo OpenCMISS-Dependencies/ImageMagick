@@ -102,9 +102,7 @@ typedef struct _ConfigureMapInfo
 static const ConfigureMapInfo
   ConfigureMap[] =
   {
-    { "NAME", "ImageMagick" },
-    { "QuantumDepth", MAGICKCORE_STRING_XQUOTE(MAGICKCORE_QUANTUM_DEPTH) } ,
-    { "FEATURES", MAGICKCORE_FEATURES_STR }
+    { "NAME", "ImageMagick" }
   };
 
 static LinkedListInfo
@@ -848,9 +846,9 @@ MagickExport LinkedListInfo *GetConfigurePaths(const char *filename,
         (void) FormatLocaleString(path,MagickPathExtent,"%s/share/%s/",home,
           MAGICKCORE_SHARE_RELATIVE_PATH);
         (void) AppendValueToLinkedList(paths,ConstantString(path));
-        (void) FormatLocaleString(path,MagickPathExtent,"%s",
-          MAGICKCORE_SHAREARCH_PATH);
-        (void) AppendValueToLinkedList(paths,ConstantString(path));
+     //   (void) FormatLocaleString(path,MagickPathExtent,"%s",
+     //     MAGICKCORE_SHAREARCH_PATH);
+     //   (void) AppendValueToLinkedList(paths,ConstantString(path));
 #endif
         home=DestroyString(home);
       }
@@ -876,9 +874,9 @@ MagickExport LinkedListInfo *GetConfigurePaths(const char *filename,
       (void) FormatLocaleString(path,MagickPathExtent,"%s/share/%s/",prefix,
         MAGICKCORE_SHARE_RELATIVE_PATH);
       (void) AppendValueToLinkedList(paths,ConstantString(path));
-      (void) FormatLocaleString(path,MagickPathExtent,"%s",
-        MAGICKCORE_SHAREARCH_PATH);
-      (void) AppendValueToLinkedList(paths,ConstantString(path));
+     // (void) FormatLocaleString(path,MagickPathExtent,"%s",
+     //   MAGICKCORE_SHAREARCH_PATH);
+     // (void) AppendValueToLinkedList(paths,ConstantString(path));
 #endif
     }
   /*
