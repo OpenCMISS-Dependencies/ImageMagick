@@ -69,7 +69,12 @@
 #include "MagickCore/string_.h"
 #include "MagickCore/string-private.h"
 #include "MagickCore/module.h"
-
+
+//#undef MAGICKCORE_GDCM_DELEGATE
+
+#if defined (MAGICKCORE_GDCM_DELEGATE)
+# include "gdcm-2.0/gdcmCReader.h"
+#else // defined (MAGICKCORE_GDCM_DELEGATE)
 /*
   Dicom medical image declarations.
 */
@@ -2614,7 +2619,8 @@ static const DicomInfo
     { 0xfffe, 0xe0dd, "!!", "Sequence Delimitation Item" },
     { 0xffff, 0xffff, "xs", (char *) NULL }
   };
-
+
+#endif /* MAGICKCORE_GDCM_DELEGATE */
 /*
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %                                                                             %
@@ -2649,6 +2655,704 @@ static MagickBooleanType IsDCM(const unsigned char *magick,const size_t length)
   return(MagickFalse);
 }
 
+
+
+#if defined(MAGICKCORE_GDCM_DELEGATE)
+
+
+ssize_t FormatMagickStringList(char *string,const size_t length,
+  const char *format,va_list operands)
+{
+  int
+    n;
+
+#if defined(MAGICKCORE_HAVE_VSNPRINTF)
+  n=vsnprintf(string,length,format,operands);
+#else
+  n=vsprintf(string,format,operands);
+#endif
+  if (n < 0)
+    string[length-1]='\0';
+  return((ssize_t) n);
+}
+
+ssize_t FormatMagickString(char *string,const size_t length,
+  const char *format,...)
+{
+  ssize_t
+    n;
+
+  va_list
+    operands;
+
+  va_start(operands,format);
+  n=(ssize_t) FormatMagickStringList(string,length,format,operands);
+  va_end(operands);
+  return(n);
+}
+
+
+static unsigned int dcmReadBlob(void *image, void *data, unsigned int size)
+{
+  unsigned int
+  	count;
+
+  count=(unsigned int) ReadBlob((Image *) image, size,
+    (unsigned char *) data);
+  return(count);
+}
+
+static int dcmSeekBlob(void *image, int offset, enum gdcmCReaderDataDirection direction)
+{
+  int
+  	whence;
+
+  switch (direction)
+  {
+    case GDCMCREADERSEEKBEGINNING:
+    {
+    	whence = SEEK_SET;
+    } break;
+    case GDCMCREADERSEEKCURRENT:
+    {
+    	whence = SEEK_CUR;
+    } break;
+    case GDCMCREADERSEEKEND:
+    {
+    	whence = SEEK_END;
+    } break;
+  }
+  return((int)SeekBlob((Image *) image,(MagickOffsetType) offset, whence));
+}
+
+static void dcmCloseBlob(void *image)
+{
+	(void)image;
+	return;
+}
+
+ static Image *ReadDCMImage(const ImageInfo *image_info,ExceptionInfo *exception)
+ {
+  const char
+    *dict_entry_name;
+
+   char
+    *byte_value_string;
+
+  enum gdcmCScalarType
+  	gdcmscalartype;
+
+  enum gdcmCVRType
+    gdcmvr,
+  	gdcmvr_dictionary,
+  	gdcmvr_read;
+
+  Image
+    *image;
+
+  long
+    y;
+
+  QuantumFormatType
+    quantum_format;
+
+  QuantumInfo
+    *quantum_info;
+
+  QuantumType
+    quantum_type;
+
+  register unsigned long
+    i;
+
+  register unsigned char
+    *p;
+
+  register Quantum
+    *q;
+
+  size_t
+    length;
+
+  struct gdcmCByteValue
+  	*gdcmbytevalue;
+
+  struct gdcmCDataElement
+  	*gdcmdataelement;
+
+  struct gdcmCDataSet
+  	*gdcmdataset;
+
+  struct gdcmCDicts
+    *gdcmdicts;
+
+  struct gdcmCDictEntry
+    *gdcmdictentry;
+
+  struct gdcmCFile
+  	*gdcmfile;
+
+  struct gdcmCImageReader
+    *gdcmreader;
+
+  struct gdcmCImage
+    *gdcmimage;
+
+  struct gdcmCPixelFormat
+    *gdcmpixelformat;
+
+  struct gdcmCTag
+    *gdcmtag, *temp_gdcmtag;
+
+  gdcmCVL
+    gdcmvl;
+
+  unsigned char
+    *data,
+    *data_ptr;
+
+  unsigned long
+	bit_shift,
+	bit_usage,
+    bits_allocated,
+	bits_stored,
+    height,
+    high_bit,
+	number_of_dimensions,
+    //number_scenes,
+    quantum_depth,
+    samples_per_pixel,
+    status,
+    width;
+
+  int print_message = 1;
+
+  /*
+    Open image file.
+  */
+  assert(image_info != (const ImageInfo *) NULL);
+  assert(image_info->signature == MagickSignature);
+  if (image_info->debug != MagickFalse)
+    (void) LogMagickEvent(TraceEvent,GetMagickModule(),"%s",
+      image_info->filename);
+  assert(exception != (ExceptionInfo *) NULL);
+  assert(exception->signature == MagickSignature);
+  image=AcquireImage(image_info, exception);
+  status=OpenBlob(image_info,image,ReadBinaryBlobMode,exception);
+  if (status == MagickFalse)
+    {
+      image=DestroyImageList(image);
+      return((Image *) NULL);
+    }
+
+  gdcmreader = gdcmCImageReaderCreate();
+
+  gdcmCImageReaderSetClientStreamFunctions(gdcmreader, (void *)image,
+    dcmReadBlob, dcmSeekBlob, dcmCloseBlob);
+
+  if (!gdcmCImageReaderRead(gdcmreader))
+  {
+	 ThrowReaderException(CoderError,"Unable to read dicom file.");
+  }
+
+  gdcmfile = gdcmCImageReaderGetFile(gdcmreader);
+
+  gdcmdataset = gdcmCFileGetDataSet(gdcmfile);
+
+  temp_gdcmtag = gdcmCTagCreate(0,0);
+
+  gdcmdicts = gdcmCGlobalInstanceGetDicts();
+
+  gdcmdataelement = gdcmCDataSetFindNextDataElement(gdcmdataset,
+	temp_gdcmtag);
+  gdcmtag = gdcmCDataElementGetTag(gdcmdataelement);
+
+	if (temp_gdcmtag)
+	{
+		gdcmCTagDestroy(temp_gdcmtag);
+		temp_gdcmtag = NULL;
+	}
+  while ((65535 != gdcmCTagGetGroup(gdcmtag)) &&
+	(65535 != gdcmCTagGetElement(gdcmtag)))
+  {
+    char *owner = 0;
+
+    if (print_message)
+   	 printf(" Tag %d %d\n", gdcmCTagGetGroup(gdcmtag),
+   		 gdcmCTagGetElement(gdcmtag));
+
+    if(gdcmCTagIsPrivate(gdcmtag) && !gdcmCTagIsPrivateCreator(gdcmtag))
+    {
+      owner = gdcmCDataSetGetPrivateCreator(gdcmdataset, gdcmtag);
+    }
+
+	gdcmdictentry = gdcmCDictsGetDictEntry(gdcmdicts, gdcmtag, owner);
+
+	if (owner)
+	{
+		gdcmCDeleteString(&owner);
+	}
+
+	dict_entry_name = gdcmCDictEntryGetName(gdcmdictentry);
+
+   if (print_message)
+   	printf("\n Entry %s\n", dict_entry_name);
+
+ 	gdcmbytevalue = gdcmCDataElementGetByteValue(gdcmdataelement);
+
+    gdcmvr_read = gdcmCVRGetType(gdcmCDataElementGetVR(gdcmdataelement));
+
+    gdcmvr_dictionary = gdcmCVRGetType(gdcmCDictEntryGetVR(gdcmdictentry));
+
+    if (gdcmvr_read == GDCMCVRTYPE_INVALID)
+    {
+      gdcmvr = gdcmvr_dictionary;
+    }
+    else if (gdcmvr_read == GDCMCVRTYPE_UN &&
+    	gdcmvr_dictionary != GDCMCVRTYPE_INVALID )
+    {
+      /* File is explicit, but still prefer vr from dict when UN*/
+      gdcmvr = gdcmvr_dictionary;
+    }
+    else /*  cool the file is Explicit ! */
+    {
+      gdcmvr = gdcmvr_read;
+    }
+
+    if (print_message)
+   	 printf(" gdcmvr %d %p\n", gdcmvr, gdcmbytevalue);
+
+    if (dict_entry_name && gdcmbytevalue)
+    {
+		    char
+		      *attribute;
+
+	        attribute=AcquireString("dcm:");
+	        (void) ConcatenateString(&attribute,dict_entry_name);
+		(void) SubstituteString(&attribute," ","");
+		if (gdcmvr & GDCMCVRTYPE_VRASCII)
+		{
+
+	        byte_value_string = gdcmCByteValuePrintASCII(gdcmbytevalue);
+
+	        length = strlen(byte_value_string);
+	        for (i=0; i < MagickMax(length,4); ++i)
+	          if (isprint((int) byte_value_string[i]) == MagickFalse)
+	            break;
+	        if ((i == length) || (length > 4))
+	          {
+	            (void) SetImageProperty(image,attribute,byte_value_string, exception);
+	          }
+			gdcmCDeleteString(&byte_value_string);
+		}
+		else if (gdcmvr & GDCMCVRTYPE_VRBINARY)
+		{
+		  char
+			binary_value_string[MaxTextExtent];
+
+		  gdcmvl = gdcmCDataElementGetVL(gdcmdataelement);
+		  switch (gdcmvl)
+		    {
+		    case 1:
+		      {
+			unsigned char value;
+			gdcmCByteValueGetBuffer(gdcmbytevalue, &value, sizeof(value));
+		    if (print_message)
+		   	 printf("  value %d\n", value);
+			(void) FormatMagickString(binary_value_string,MaxTextExtent,"%u",value);
+			(void) SetImageProperty(image,attribute,binary_value_string, exception);
+		      } break;
+		    case 2:
+		      {
+			unsigned short value;
+			gdcmCByteValueGetBuffer(gdcmbytevalue, (unsigned char *)&value, sizeof(value));
+		    if (print_message)
+				printf("   value %d\n", value);
+			(void) FormatMagickString(binary_value_string,MaxTextExtent,"%u",value);
+			(void) SetImageProperty(image,attribute,binary_value_string, exception);
+		      } break;
+		    case 4:
+		      {
+			unsigned int value;
+			gdcmCByteValueGetBuffer(gdcmbytevalue, (unsigned char *)&value, sizeof(value));
+		    if (print_message)
+		   	 printf("   value %d\n", value);
+			(void) FormatMagickString(binary_value_string,MaxTextExtent,"%u",value);
+			(void) SetImageProperty(image,attribute,binary_value_string, exception);
+		      } break;
+		    }
+		}
+	     attribute=DestroyString(attribute);
+    }
+
+	temp_gdcmtag = gdcmCTagCreate(gdcmCTagGetGroup(gdcmtag),
+		gdcmCTagGetElement(gdcmtag) + 1);
+	gdcmdataelement = gdcmCDataSetFindNextDataElement(gdcmdataset,
+		temp_gdcmtag);
+ gdcmtag = gdcmCDataElementGetTag(gdcmdataelement);
+	if (temp_gdcmtag)
+	{
+		gdcmCTagDestroy(temp_gdcmtag);
+		temp_gdcmtag = NULL;
+	}
+  }
+
+  gdcmimage = gdcmCImageReaderGetImage(gdcmreader);
+
+  if (!gdcmimage)
+     ThrowReaderException(CoderError,"Unable to read dicom image data from file.");
+
+  number_of_dimensions = gdcmCImageGetNumberOfDimensions(gdcmimage);
+  if (print_message)
+	  printf("Number of dimensions %d\n", number_of_dimensions);
+  width = gdcmCImageGetDimension(gdcmimage, 0);
+  height = gdcmCImageGetDimension(gdcmimage, 1);
+  /* AWU:  the number of dimensions is set to be 2 somewhere internally but the actual
+     number of dimension can be less. Getting the value at dimension 2 can be unsafe.
+	    fortunately number_scenes is not needed anywhere in the code. */
+  //number_scenes = gdcmCImageGetDimension(gdcmimage, 2);
+  //printf("Width %d Height %d NumberOfScenes %d\n",
+  //  width, height, number_scenes);
+
+  if (SetImageExtent(image,width,height,exception) == MagickFalse)
+    {
+      return(DestroyImageList(image));
+    }
+
+  gdcmpixelformat = gdcmCImageGetPixelFormat(gdcmimage);
+
+  samples_per_pixel = gdcmCPixelFormatGetSamplesPerPixel(gdcmpixelformat);
+  bits_allocated = gdcmCPixelFormatGetBitsAllocated(gdcmpixelformat);
+  bits_stored = gdcmCPixelFormatGetBitsStored(gdcmpixelformat);
+  high_bit = gdcmCPixelFormatGetHighBit(gdcmpixelformat);
+
+  if (print_message)
+	  printf(" samples_per_pixel %ld bits_allocated %ld bits_stored %ld high_bit %ld\n",
+		  samples_per_pixel, bits_allocated, bits_stored, high_bit);
+
+  gdcmscalartype = gdcmCPixelFormatGetScalarType(gdcmpixelformat);
+
+  switch (gdcmscalartype)
+  {
+  	case GDCMCSCALARTYPE_UINT8:
+  	{
+  		quantum_depth = 8;
+  		quantum_format = UnsignedQuantumFormat;
+  	} break;
+  	case GDCMCSCALARTYPE_INT8:
+  	{
+  		quantum_depth = 8;
+  		quantum_format = SignedQuantumFormat;
+  	} break;
+  	case GDCMCSCALARTYPE_UINT12:
+  	{
+  		quantum_depth = 12;
+  		quantum_format = UnsignedQuantumFormat;
+  	} break;
+  	case GDCMCSCALARTYPE_INT12:
+  	{
+  		quantum_depth = 12;
+  		quantum_format = SignedQuantumFormat;
+  	} break;
+  	case GDCMCSCALARTYPE_UINT16:
+  	{
+  		quantum_depth = 16;
+  		quantum_format = UnsignedQuantumFormat;
+  	} break;
+  	case GDCMCSCALARTYPE_INT16:
+  	{
+  		quantum_depth = 16;
+  		quantum_format = SignedQuantumFormat;
+  	} break;
+        default:
+	{
+	  /* Do nothing, suppress warnings */
+	} break;
+  }
+
+  quantum_info=AcquireQuantumInfo(image_info,image);
+
+  if ((quantum_depth == 16) && (bits_stored == 12))
+  {
+     quantum_depth = bits_stored;
+     quantum_info->pack = MagickFalse;
+  }
+
+  SetQuantumDepth(image, quantum_info, quantum_depth);
+  SetQuantumFormat(image, quantum_info, quantum_format);
+
+  if (high_bit == 0)
+  {
+    image->endian=MSBEndian;
+  }
+  else
+  {
+    image->endian=LSBEndian;
+  }
+
+  if (print_message)
+	  printf(" quantum %d format %d \n", quantum_depth, quantum_format);
+
+  length = gdcmCImageGetBufferLength(gdcmimage);
+
+  data = (unsigned char *) AcquireQuantumMemory(length+1,bits_allocated/8*
+          sizeof(*data));
+
+  gdcmCImageGetBuffer(gdcmimage, (char *)data);
+
+  switch (samples_per_pixel)
+  {
+  case 1:
+  {
+	quantum_type=GrayQuantum;
+	/* Automatically shift images which don't use the most significant bits declared
+	 * into the most significant positions.
+	 */
+   if (print_message)
+   	printf(" Starting automatic bit shift for grayscale\n");
+	/* Determine bit usage. */
+	bit_usage = 0;
+	data_ptr = data;
+	switch (bits_allocated)
+	{
+	case 8:
+	{
+		for (i = 0 ; i < height*width ; i++)
+		{
+			bit_usage |= *data_ptr;
+			data_ptr++;
+		}
+	} break;
+	case 16:
+	{
+		for (i = 0 ; i < height*width ; i++)
+		{
+			if (quantum_format == UnsignedQuantumFormat)
+				bit_usage |= *((unsigned short *)data_ptr);
+			else
+				bit_usage |= *((short *)data_ptr);
+			data_ptr += 2;
+		}
+	} break;
+	default:
+	{
+		/* Set all bits */
+		bit_usage = 0xffffffff;
+	}
+	}
+   if (print_message)
+   	printf(" Bit usage %x\n", bit_usage);
+	bit_shift = 0;
+	if (high_bit == 0)
+	{
+	  while ((bit_shift < quantum_depth) && !(bit_usage & 1 << bit_shift))
+	  {
+	    bit_shift++;
+	  }
+	}
+	else
+	{
+	  while ((bit_shift < quantum_depth) && !(bit_usage & 1 << (quantum_depth - 1 - bit_shift)))
+	  {
+	    bit_shift++;
+	  }
+	}
+   if (print_message)
+   	printf(" Bit shift %d\n", bit_shift);
+	/* Shift bits */
+	if ((bit_shift > 0) && (bit_shift < quantum_depth))
+	{
+		/* Store bit shift in metadata */
+		char
+			bit_shift_string[MaxTextExtent];
+
+		data_ptr = data;
+		switch (bits_allocated)
+		{
+		case 8:
+		{
+		  if (high_bit == 0)
+		  {
+		    for (i = 0 ; i < height*width ; i++)
+		    {
+		      *data_ptr = *data_ptr >> bit_shift;
+		      data_ptr++;
+		    }
+		  }
+		  else
+		  {
+		    for (i = 0 ; i < height*width ; i++)
+		    {
+		      *data_ptr = *data_ptr << bit_shift;
+		      data_ptr++;
+		    }
+		  }
+		} break;
+		case 16:
+		{
+		  if (high_bit == 0)
+		  {
+		    for (i = 0 ; i < height*width ; i++)
+		    {
+				if (quantum_format == UnsignedQuantumFormat)
+					*((unsigned short *)data_ptr) = *((unsigned short *)data_ptr) >> bit_shift;
+				else
+					*((short *)data_ptr) = *((short *)data_ptr) >> bit_shift;
+		      data_ptr += 2;
+		      *data_ptr = *data_ptr >> bit_shift;
+		      data_ptr++;
+		    }
+		  }
+		  else
+		  {
+		    for (i = 0 ; i < height*width ; i++)
+		    {
+				if (quantum_format == UnsignedQuantumFormat)
+					*((unsigned short *)data_ptr) = *((unsigned short *)data_ptr) << bit_shift;
+				else
+					*((short *)data_ptr) = *((short *)data_ptr) << bit_shift;
+		      data_ptr += 2;
+		    }
+		  }
+		} break;
+		default:
+		{
+			/* Do nothing */
+		}
+		}
+
+		(void) FormatMagickString(bit_shift_string,MaxTextExtent,"%lX",bit_usage);
+		(void) SetImageProperty(image,"CmissDCM:OriginalBitUsage",bit_shift_string,exception);
+
+		(void) FormatMagickString(bit_shift_string,MaxTextExtent,"%d",1<<bit_shift);
+		(void) SetImageProperty(image,"CmissDCM:AutoBitShiftScaling",bit_shift_string,exception);
+	}
+   if (print_message)
+   	printf(" Finished automatic bit shift for grayscale\n");
+	//fflush(stdout);
+  } break;
+  case 2:
+  {
+	quantum_type=GrayAlphaQuantum;
+	image->alpha_trait = BlendPixelTrait;
+  } break;
+  case 3:
+  {
+    quantum_type=RGBQuantum;
+  } break;
+  case 4:
+  {
+    quantum_type=RGBAQuantum;
+    image->alpha_trait = BlendPixelTrait;
+  } break;
+  default:
+  {
+      ThrowReaderException(CoderError,"Unsupported number of samples per pixel");
+  } break;
+  }
+  for (y=0; y < (long) image->rows; y++)
+    {
+	    if (print_message)
+	    {
+		  if (y == 0)
+			printf(" 0 0 %d\n", ((short*)data)[0]);
+		  if (y == 63)
+			printf(" 63 63 %d\n", ((short*)(data + (y*width+63)*bits_allocated/8*samples_per_pixel))[0]);
+		  if (y == 255)
+			printf(" 255 255 %d\n", ((short*)(data + (y*width+255)*bits_allocated/8*samples_per_pixel))[0]);
+	    }
+      q=QueueAuthenticPixels(image, 0, y, image->columns, 1, exception);
+      if (q == (Quantum *) NULL)
+        break;
+      /* Handle some cases that aren't handled in ImportQuantumPixels
+       * that are common. */
+      if ((quantum_type == GrayQuantum) &&
+        (quantum_format == SignedQuantumFormat))
+      {
+    	  long number_pixels = image->columns;
+    	  p = data + y*bits_allocated/8*samples_per_pixel*width;
+    	  switch (quantum_depth)
+    	  {
+          case 8:
+          {
+            unsigned char pixel;
+            long x;
+            for (x=0; x < number_pixels; x++)
+            {
+              p=PushCharPixel(p,&pixel);
+              Quantum temp = ScaleCharToQuantum(pixel);
+              if (quantum_info->min_is_white != MagickFalse)
+            	  temp = QuantumRange - temp;
+              SetPixelRed(image, temp, q);
+              SetPixelGreen(image, temp, q);
+              SetPixelBlue(image, temp, q);
+              p+=quantum_info->pad;
+              q+=GetPixelChannels(image);
+            }
+            break;
+          }
+          case 16:
+          {
+            unsigned short
+              pixel;
+            long x;
+            if (quantum_info->min_is_white != MagickFalse)
+              {
+                for (x=0; x < number_pixels; x++)
+                {
+                  p=PushShortPixel(image->endian,p,&pixel);
+                  SetPixelRed(image, (QuantumRange-ScaleShortToQuantum(pixel)), q);
+                  SetPixelGreen(image, (QuantumRange-ScaleShortToQuantum(pixel)), q);
+                  SetPixelBlue(image, (QuantumRange-ScaleShortToQuantum(pixel)), q);
+                  p+=quantum_info->pad;
+                  q+=GetPixelChannels(image);
+                }
+                break;
+              }
+            for (x=0; x < number_pixels; x++)
+            {
+              p=PushShortPixel(image->endian,p,&pixel);
+              SetPixelRed(image, ScaleShortToQuantum(pixel), q);
+              SetPixelGreen(image, ScaleShortToQuantum(pixel), q);
+              SetPixelBlue(image, ScaleShortToQuantum(pixel), q);
+              p+=quantum_info->pad;
+              q+=GetPixelChannels(image);
+            }
+          }
+          break;
+          default:
+          {
+              ThrowReaderException(CoderError,"Unsupported gray signed pixel depth");
+          }
+          break;
+    	  }
+      }
+      else
+      {
+        length=ImportQuantumPixels(image, (CacheView *)0, quantum_info, quantum_type,
+          data + y*bits_allocated/8*samples_per_pixel*width, exception);
+      }
+      if (SyncAuthenticPixels(image, exception) == MagickFalse)
+        break;
+      if (image->previous == (Image *) NULL)
+        if ((image->progress_monitor != (MagickProgressMonitor) NULL) &&
+            (QuantumTick(y,image->rows) != MagickFalse))
+          {
+            status=image->progress_monitor(LoadImageTag,y,image->rows,
+              image->client_data);
+            if (status == MagickFalse)
+              break;
+          }
+    }
+
+  gdcmCImageReaderDestroy(gdcmreader);
+  DestroyQuantumInfo(quantum_info);
+  data=(unsigned char *) RelinquishMagickMemory(data);
+
+  return(GetFirstImageInList(image));
+}
+
+#else /* MAGICKCORE_GDCM_DELEGATE */
 /*
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %                                                                             %
@@ -4119,7 +4823,9 @@ static Image *ReadDCMImage(const ImageInfo *image_info,ExceptionInfo *exception)
   (void) CloseBlob(image);
   return(GetFirstImageInList(image));
 }
-
+
+#endif /* MAGICKCORE_GDCM_DELEGATE */
+
 /*
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %                                                                             %
