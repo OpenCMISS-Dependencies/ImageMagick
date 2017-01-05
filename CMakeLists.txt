@@ -36,7 +36,7 @@
  # ***** END LICENSE BLOCK ***** */
 
 cmake_minimum_required( VERSION 3.0 )
-project(ImageMagick VERSION 6.7.0.8 LANGUAGES C CXX)
+project(ImageMagick VERSION 7.0.3.5 LANGUAGES C CXX)
 set(CMAKE_POSITION_INDEPENDENT_CODE YES)
 
 # Specific library options
