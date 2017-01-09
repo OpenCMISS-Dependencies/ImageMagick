@@ -73,7 +73,7 @@
 //#undef MAGICKCORE_GDCM_DELEGATE
 
 #if defined (MAGICKCORE_GDCM_DELEGATE)
-# include "gdcm-2.0/gdcmCReader.h"
+# include "gdcm-2.6/gdcmCReader.h"
 #else // defined (MAGICKCORE_GDCM_DELEGATE)
 /*
   Dicom medical image declarations.
