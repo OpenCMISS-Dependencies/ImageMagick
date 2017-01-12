@@ -939,7 +939,7 @@
    nothing if this is not supported.  Do not define if restrict is
    supported directly.  */
 #if !defined(restrict)
-@HASHCMAKEDEFINE@ restrict ${restrict}
+# define restrict ${restrict}
 #endif
 
 /* Work around a bug in Sun C++: it does not support _Restrict or
