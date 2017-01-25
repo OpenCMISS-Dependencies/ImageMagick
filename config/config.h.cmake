@@ -447,6 +447,9 @@
 /* Define to 1 if you have the `strcasecmp' function. */
 @HASHCMAKEDEFINE@ @IMAGEMAGICK_CONFIG_PREFIX@HAVE_STRCASECMP 1
 
+/* Define to 1 if you have the `_stricmp' function. */
+@HASHCMAKEDEFINE@ @IMAGEMAGICK_CONFIG_PREFIX@HAVE__STRICMP 1
+
 /* Define to 1 if you have the `strchr' function. */
 @HASHCMAKEDEFINE@ @IMAGEMAGICK_CONFIG_PREFIX@HAVE_STRCHR 1
 
@@ -479,6 +482,9 @@
 
 /* Define to 1 if you have the `strncasecmp' function. */
 @HASHCMAKEDEFINE@ @IMAGEMAGICK_CONFIG_PREFIX@HAVE_STRNCASECMP 1
+
+/* Define to 1 if you have the `_strnicmp' function. */
+@HASHCMAKEDEFINE@ @IMAGEMAGICK_CONFIG_PREFIX@HAVE__STRNICMP 1
 
 /* Define to 1 if you have the `strpbrk' function. */
 @HASHCMAKEDEFINE@ @IMAGEMAGICK_CONFIG_PREFIX@HAVE_STRPBRK 1

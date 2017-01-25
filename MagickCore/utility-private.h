@@ -158,8 +158,10 @@ static inline void getcwd_utf8(char *path,size_t extent)
 }
 
 #if defined(MAGICKCORE_WINDOWS_SUPPORT) && !defined(__CYGWIN__) && !defined(__MINGW32__) && !defined(__MINGW64__)
+# if !defined(mode_t)
 typedef int
   mode_t;
+# endif
 #endif
 
 static inline int open_utf8(const char *path,int flags,mode_t mode)

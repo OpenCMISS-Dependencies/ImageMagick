@@ -1419,6 +1419,8 @@ MagickExport int LocaleCompare(const char *p,const char *q)
     return(1);
 #if defined(MAGICKCORE_HAVE_STRCASECMP)
   return(strcasecmp(p,q));
+#elif defined(MAGICKCORE_HAVE__STRICMP)
+  return(_stricmp(p,q));
 #else
   {
     register int
@@ -1519,6 +1521,8 @@ MagickExport int LocaleNCompare(const char *p,const char *q,const size_t length)
     return(1);
 #if defined(MAGICKCORE_HAVE_STRNCASECMP)
   return(strncasecmp(p,q,length));
+#elif defined(MAGICKCORE_HAVE__STRNICMP)
+  return(_strnicmp(p,q,length));
 #else
   {
     register int
