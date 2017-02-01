@@ -66,6 +66,7 @@
 #include "MagickCore/module.h"
 #include "MagickCore/transform.h"
 #include "MagickCore/option.h"
+#include "MagickCore/version-private.h"
 
 /*
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -156,12 +157,12 @@ static Image *ReadAnalyzeImage(const ImageInfo *image_info,ExceptionInfo *except
 	Open image file.
   */
   assert(image_info != (const ImageInfo *) NULL);
-  assert(image_info->signature == MagickSignature);
+  assert(image_info->signature == GetMagickSignature((const StringInfo *) NULL));
   if (image_info->debug != MagickFalse)
 	(void) LogMagickEvent(TraceEvent,GetMagickModule(),"%s",
 	  image_info->filename);
   assert(exception != (ExceptionInfo *) NULL);
-  assert(exception->signature == MagickSignature);
+  assert(exception->signature == GetMagickSignature((const StringInfo *) NULL));
   image=AcquireImage(image_info, exception);
   status=OpenBlob(image_info,image,ReadBinaryBlobMode,exception);
   if (status == MagickFalse)
