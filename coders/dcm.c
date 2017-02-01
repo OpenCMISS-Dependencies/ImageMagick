@@ -2765,7 +2765,7 @@ static void dcmCloseBlob(void *image)
   register unsigned long
     i;
 
-  register unsigned char
+  register const unsigned char
     *p;
 
   register Quantum
@@ -2955,7 +2955,7 @@ static void dcmCloseBlob(void *image)
 		    {
 		    case 1:
 		      {
-			unsigned char value;
+			char value;
 			gdcmCByteValueGetBuffer(gdcmbytevalue, &value, sizeof(value));
 		    if (print_message)
 		   	 printf("  value %d\n", value);
@@ -2965,7 +2965,7 @@ static void dcmCloseBlob(void *image)
 		    case 2:
 		      {
 			unsigned short value;
-			gdcmCByteValueGetBuffer(gdcmbytevalue, (unsigned char *)&value, sizeof(value));
+			gdcmCByteValueGetBuffer(gdcmbytevalue, (char *)&value, sizeof(value));
 		    if (print_message)
 				printf("   value %d\n", value);
 			(void) FormatMagickString(binary_value_string,MaxTextExtent,"%u",value);
@@ -2974,7 +2974,7 @@ static void dcmCloseBlob(void *image)
 		    case 4:
 		      {
 			unsigned int value;
-			gdcmCByteValueGetBuffer(gdcmbytevalue, (unsigned char *)&value, sizeof(value));
+			gdcmCByteValueGetBuffer(gdcmbytevalue, (char *)&value, sizeof(value));
 		    if (print_message)
 		   	 printf("   value %d\n", value);
 			(void) FormatMagickString(binary_value_string,MaxTextExtent,"%u",value);
@@ -3004,7 +3004,7 @@ static void dcmCloseBlob(void *image)
 
   number_of_dimensions = gdcmCImageGetNumberOfDimensions(gdcmimage);
   if (print_message)
-	  printf("Number of dimensions %d\n", number_of_dimensions);
+	  printf("Number of dimensions %lu\n", number_of_dimensions);
   width = gdcmCImageGetDimension(gdcmimage, 0);
   height = gdcmCImageGetDimension(gdcmimage, 1);
   /* AWU:  the number of dimensions is set to be 2 somewhere internally but the actual
@@ -3091,7 +3091,7 @@ static void dcmCloseBlob(void *image)
   }
 
   if (print_message)
-	  printf(" quantum %d format %d \n", quantum_depth, quantum_format);
+	  printf(" quantum %lu format %d \n", quantum_depth, quantum_format);
 
   length = gdcmCImageGetBufferLength(gdcmimage);
 
@@ -3140,8 +3140,8 @@ static void dcmCloseBlob(void *image)
 		bit_usage = 0xffffffff;
 	}
 	}
-   if (print_message)
-   	printf(" Bit usage %x\n", bit_usage);
+	if (print_message)
+	  printf(" Bit usage %lx\n", bit_usage);
 	bit_shift = 0;
 	if (high_bit == 0)
 	{
@@ -3157,8 +3157,8 @@ static void dcmCloseBlob(void *image)
 	    bit_shift++;
 	  }
 	}
-   if (print_message)
-   	printf(" Bit shift %d\n", bit_shift);
+	if (print_message)
+	  printf(" Bit shift %lu\n", bit_shift);
 	/* Shift bits */
 	if ((bit_shift > 0) && (bit_shift < quantum_depth))
 	{
