@@ -33,9 +33,9 @@ extern "C" {
 #if defined(MAGICKCORE_WINDOWS_SUPPORT) && !defined(__CYGWIN__)
 # define MagickPrivate
 # if defined(_MT) && defined(_DLL) && !defined(_MAGICKDLL_) && !defined(_LIB)
-#  define _MAGICKDLL_
+#  define _MAGICKDLL_ 0
 # endif
-# if defined(_MAGICKDLL_)
+# if _MAGICKDLL_
 #  if defined(_VISUALC_)
 #   pragma warning( disable: 4273 )  /* Disable the dll linkage warnings */
 #  endif
