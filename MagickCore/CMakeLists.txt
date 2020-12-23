@@ -12,8 +12,9 @@ string(TOUPPER ${LIBRARY_TARGET_NAME} UPPERCASE_LIBRARY_TARGET_NAME )
 
 set( IMAGEMAGICK_CONFIG_PREFIX MAGICKCORE_ )
 set( HASHCMAKEDEFINE \#cmakedefine )
+set( HASHCMAKEDEFINE01 \#cmakedefine01 )
 include( ../ConfigurePrefix.cmake )
-set( MAGICK_CONFIG_HEADER_FILE ${CMAKE_CURRENT_BINARY_DIR}/magick-config.h )
+set( MAGICK_CONFIG_HEADER_FILE ${CMAKE_CURRENT_BINARY_DIR}/magick-baseconfig.h )
 configure_file( ${CMAKE_CURRENT_SOURCE_DIR}/../config/config.h.cmake
 	${MAGICK_CONFIG_HEADER_FILE}.step1 @ONLY )
 configure_file( ${MAGICK_CONFIG_HEADER_FILE}.step1 ${MAGICK_CONFIG_HEADER_FILE} )
